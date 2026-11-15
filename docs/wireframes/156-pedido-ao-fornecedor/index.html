@@ -1,0 +1,345 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Wireframe do bloco Pedido ao fornecedor (#156, entrega 4)</title><style>
+body{font:14px/1.45 system-ui,sans-serif;margin:0;padding:24px;background:#f4f4f6;color:#1d1d22}
+h1{font-size:22px}h2{font-size:17px;margin:32px 0 6px}h3{font-size:15px;margin:0}
+.wrap{max-width:1180px;margin:auto}.card{background:#fff;border:1px solid #dcdce2;border-radius:10px;padding:16px;margin:14px 0}
+.meta{color:#55555e;font-size:13px}.code{display:inline-block;background:#1d1d22;color:#fff;border-radius:6px;padding:1px 8px;margin-right:6px;font-size:12px}
+.pair{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;margin-top:10px}.w{font-size:12px;color:#66666f;margin-bottom:4px}
+.frame{container-type:inline-size;background:#fff;border:1px solid #c7c7cf;border-radius:6px;box-shadow:0 2px 8px #0001;max-width:100%}
+.drawer{padding:12px}.ctx{font-size:12px;color:#777;border:1px dashed #ccc;border-radius:6px;padding:8px;margin-bottom:10px}.ctxa{color:#1b7a43}
+.empty{border:1px dashed #bbb;padding:18px;text-align:center;color:#888;border-radius:6px}
+.block{border:1px solid #d6d6dd;border-radius:8px;padding:12px;background:#fafafc}
+.bh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.bh h4{margin:0;font-size:15px}
+.ai{background:#fde7f1;color:#a3185b;border-radius:10px;padding:1px 8px;font-size:12px}
+.sec{border-top:1px solid #e5e5ea;padding:10px 0}.st{font-weight:600;margin-bottom:4px}.st2{font-weight:600;margin:10px 0 2px}
+.lock{font-weight:400;font-size:11px;color:#6b6b75;background:#ececf0;border-radius:8px;padding:0 6px;margin-left:4px;white-space:nowrap}
+.dl>div{display:flex;justify-content:space-between;gap:12px;padding:4px 0;border-bottom:1px solid #eee}.dl dt{color:#66666f}.dl dd{margin:0;text-align:right}
+.dl .tot{font-weight:600}.note{font-size:12px;color:#66666f;margin-top:4px}
+.mail{border:1px solid #d6d6dd;border-radius:6px;background:#fff;padding:8px;margin-top:6px}
+textarea{width:100%;box-sizing:border-box;height:130px;margin-top:6px;font:inherit}textarea.bad{border:2px solid #c0392b}
+.hint{font-size:12px;color:#66666f}.inl{padding:8px;color:#55555e}.inl.err{color:#a8281c}
+.asks{margin:4px 0 0 18px;padding:0}.att{margin-top:8px;font-size:13px}
+.acts{display:flex;gap:8px;justify-content:space-between;margin-top:10px;flex-wrap:wrap}
+.btn{border-radius:6px;padding:6px 12px;border:1px solid #b5b5bf;background:#fff;display:inline-block}.btn.pri{background:#e8590c;color:#fff;border-color:#e8590c}
+.btn.ghost{border-color:transparent;color:#555}.btn.dis{opacity:.5}.btn.busy{font-style:italic}
+.alert{border-radius:6px;padding:8px 10px;margin:6px 0;border:1px solid}.alert.ok{background:#e8f6ee;border-color:#9fd3b4}.alert.err{background:#fdecea;border-color:#e3a39c}
+.alert.info{background:#e8f0fb;border-color:#a8c2ea}.alert.neu{background:#f0f0f3;border-color:#cfcfd6}.alert.warn{background:#fff4e0;border-color:#e8c27c}
+@container (max-width:420px){.dl>div{flex-direction:column;gap:0}.dl dd{text-align:left}.acts{flex-direction:column-reverse}.btn{text-align:center}.item dd{font-size:13px}}
+table{border-collapse:collapse;width:100%;font-size:13px}td,th{border:1px solid #dcdce2;padding:5px 8px;text-align:left;vertical-align:top}
+pre{background:#1d1d22;color:#e8e8ee;padding:14px;border-radius:8px;overflow:auto;font-size:12px;line-height:1.25}
+</style></head><body><div class="wrap">
+<h1>Bloco "Pedido ao fornecedor" na gaveta da proposta</h1><p class="meta">#156, entrega 4 de 5 · receber parcial (E1, E2, E3) com request_type = return_note · rodada 1 · aprovado pelo dono do design em 15/11/2026. Estrutura, estados e fluxo; não é o visual final.</p>
+<div class="card"><h3>Onde o bloco fica</h3><p>Dentro da gaveta que já existe (<code>ProposalPanel</code>, 530 px no desktop, largura da tela no celular), por último: abaixo do Alert "Decisão registrada", que vem depois do dossiê e da linha do tempo. É o fim da leitura: primeiro o que o sistema propôs e a pessoa decidiu, depois o que se pede ao fornecedor em consequência. Look: <code>Block</code>, <code>DataList</code>, <code>Alert</code>, <code>StatusBadge</code> e o selo <code>AiSourceBadge</code> do Claude, como o dossiê. Em cada estado abaixo, as duas larguras lado a lado (as quebras vêm de uma regra de largura do próprio quadro).</p></div>
+<div class="card"><h3>Quando o bloco não aparece</h3><ul><li>Proposta ainda não decidida (formulário &quot;Sua decisão&quot; no lugar).</li><li>Decisão sem devolução: receber, recusar, ou receber parcial em que toda linha ficou em &quot;segurar&quot;.</li><li>Classificação E7 ou match (sem e-mail, sem nota); classificação fora de E1, E2 e E3 (backlog).</li><li>Proposta alterada pela pessoa para um tipo sem devolução: o bloco não aparece, mesmo que a proposta do sistema tivesse devolução.</li></ul></div>
+<h2>Estados</h2>
+<div class="card"><h3><span class="code">S0</span>Não aparece</h3><p class="meta"><b>Quando:</b> A proposta não está decidida (a gaveta mostra o formulário &quot;Sua decisão&quot;); a decisão não devolve nada (receber, recusar, ou receber parcial com todas as linhas em &quot;segurar&quot;); a classificação é E7 ou match; a classificação não é E1, E2 nem E3.</p><p class="meta"><b>O que mostra:</b> Nada. Nenhum título, nenhum espaço vazio: a gaveta termina no Alert &quot;Decisão registrada&quot; como hoje.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="empty">(sem bloco)</div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="empty">(sem bloco)</div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S1</span>Carregando o pedido</h3><p class="meta"><b>Quando:</b> A gaveta abriu, a proposta está decidida com devolução e a leitura do pedido ao fornecedor ainda não voltou.</p><p class="meta"><b>O que mostra:</b> O título do bloco e a linha &quot;Carregando o pedido ao fornecedor…&quot; no mesmo InlineEmpty que a gaveta usa. O resto da gaveta não espera por ele.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4></div><div class="inl">Carregando o pedido ao fornecedor…</div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4></div><div class="inl">Carregando o pedido ao fornecedor…</div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S2</span>Erro ao carregar o pedido</h3><p class="meta"><b>Quando:</b> A leitura do pedido falhou (rede ou 5xx). Um 404 não é erro: é &quot;ainda sem pedido&quot; (S3).</p><p class="meta"><b>O que mostra:</b> Alert de erro com o que aconteceu e &quot;Tentar de novo&quot;. Não bloqueia o resto da gaveta; a decisão já registrada continua valendo.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4></div><div class="alert err"><b>Não consegui carregar o pedido ao fornecedor.</b><br>Sua decisão está registrada. Tente de novo em um minuto.</div><div class="acts"><span class="btn sec">Tentar de novo</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4></div><div class="alert err"><b>Não consegui carregar o pedido ao fornecedor.</b><br>Sua decisão está registrada. Tente de novo em um minuto.</div><div class="acts"><span class="btn sec">Tentar de novo</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S3</span>Escrevendo (Claude)</h3><p class="meta"><b>Quando:</b> A decisão com devolução existe e o Cron seguinte ainda não escreveu o rascunho (ou a pessoa pediu &quot;Refazer&quot;).</p><p class="meta"><b>O que mostra:</b> O mesmo estado de IA do dossiê (Alert info, selo ✦ Claude): &quot;O Claude está preparando o pedido…&quot;, mais a linha de quando sai. Sem botões: não há o que a pessoa fazer. Não há polling: a pessoa reabre a gaveta (ver pergunta 6).</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert info"><b>O Claude está preparando o pedido…</b><br>O rascunho da nota de devolução e do e-mail sai na próxima rodada. Nada é emitido nem enviado sem o seu clique.</div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert info"><b>O Claude está preparando o pedido…</b><br>O rascunho da nota de devolução e do e-mail sai na próxima rodada. Nada é emitido nem enviado sem o seu clique.</div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S4</span>Rascunho</h3><p class="meta"><b>Quando:</b> O Cron escreveu o rascunho, o verificador de números aprovou, nada foi emitido (AC-1, AC-3).</p><p class="meta"><b>O que mostra:</b> Nota de devolução (travada) + e-mail (para, prazo, assunto, corpo) + &quot;O que pedimos&quot; (travado) + anexo + três botões. Emitir e enviar é o botão primário; Descartar é discreto. No celular: o item da nota quebra em duas linhas (nome acima, conta abaixo), os botões empilham com Emitir e enviar no topo.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Descartar</span><span class="btn sec">Editar</span><span class="btn pri">Emitir e enviar</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Descartar</span><span class="btn sec">Editar</span><span class="btn pri">Emitir e enviar</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S5</span>Editando o texto</h3><p class="meta"><b>Quando:</b> A pessoa clicou em &quot;Editar&quot; no rascunho (AC-7).</p><p class="meta"><b>O que mostra:</b> Só o corpo vira campo de texto, com as marcas {{...}} do catálogo visíveis. Assunto, destinatário, prazo, nota, itens e &quot;O que pedimos&quot; ficam como estão, cada um com o selo 🔒. Salvar e Cancelar substituem os três botões: Emitir e enviar some até salvar ou cancelar, para a pessoa não emitir um texto não salvo.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail <span class="lock">🔒 só o texto edita</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado <span class="lock">🔒 travado</span></dd></div></dl>
+<textarea>Olá, equipe da Higiene Lume.
+Na NF {{numero_nf}} veio Shampoo 350 ml ({{qtd_item}}, {{valor_devolucao}}) no lugar do Sabonete em barra 85 g pedido.
+Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g ({{qtd_pedida}}) até {{prazo}}.</textarea><div class="hint">Mantenha as marcas {{...}}: elas viram os números do banco. Números digitados à mão não passam.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Cancelar</span><span class="btn pri">Salvar texto</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail <span class="lock">🔒 só o texto edita</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado <span class="lock">🔒 travado</span></dd></div></dl>
+<textarea>Olá, equipe da Higiene Lume.
+Na NF {{numero_nf}} veio Shampoo 350 ml ({{qtd_item}}, {{valor_devolucao}}) no lugar do Sabonete em barra 85 g pedido.
+Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g ({{qtd_pedida}}) até {{prazo}}.</textarea><div class="hint">Mantenha as marcas {{...}}: elas viram os números do banco. Números digitados à mão não passam.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Cancelar</span><span class="btn pri">Salvar texto</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S5b</span>Editando: texto recusado</h3><p class="meta"><b>Quando:</b> Ao salvar, o verificador achou um número que não bate com o banco (AC-6 aplicado à edição).</p><p class="meta"><b>O que mostra:</b> O campo fica aberto com o texto da pessoa, o erro vem logo abaixo dele, e Salvar continua disponível para tentar de novo. O rascunho gravado não muda.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<textarea class="bad">Olá, equipe da Higiene Lume.
+Na NF {{numero_nf}} veio Shampoo 350 ml ({{qtd_item}}, R$ 6.345,40) no lugar do Sabonete em barra 85 g pedido.
+Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g ({{qtd_pedida}}) até {{prazo}}.</textarea><div class="inl err">Não salvei: o texto tem um número (R$ 6.345,40) que não está no banco. Use a marca {{valor_devolucao}}.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Cancelar</span><span class="btn pri">Salvar texto</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<textarea class="bad">Olá, equipe da Higiene Lume.
+Na NF {{numero_nf}} veio Shampoo 350 ml ({{qtd_item}}, R$ 6.345,40) no lugar do Sabonete em barra 85 g pedido.
+Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g ({{qtd_pedida}}) até {{prazo}}.</textarea><div class="inl err">Não salvei: o texto tem um número (R$ 6.345,40) que não está no banco. Use a marca {{valor_devolucao}}.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Cancelar</span><span class="btn pri">Salvar texto</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S6</span>Emitindo e enviando</h3><p class="meta"><b>Quando:</b> A pessoa clicou em &quot;Emitir e enviar&quot; e a resposta não voltou (AC-3, AC-4).</p><p class="meta"><b>O que mostra:</b> O rascunho fica como está, todos os botões desabilitados e o primário ocupado (&quot;Emitindo e enviando…&quot;). Uma região role=&quot;status&quot; anuncia o andamento. Nada de modal.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost dis">Descartar</span><span class="btn sec dis">Editar</span><span class="btn pri dis busy">⟳ Emitindo e enviando…</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost dis">Descartar</span><span class="btn sec dis">Editar</span><span class="btn pri dis busy">⟳ Emitindo e enviando…</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S7</span>Emitida e enviada</h3><p class="meta"><b>Quando:</b> A nota foi emitida e o e-mail saiu (AC-4, AC-5).</p><p class="meta"><b>O que mostra:</b> Alert de sucesso &quot;Nota de devolução ND-0012 emitida e enviada por você às 10h40 · aguardando resposta até 19/11&quot;, e abaixo a nota emitida e o e-mail, sem botão de ação (leitura). A nota tem o link para o documento emitido (JSON; PDF na entrega 5).</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert ok"><b>Nota de devolução ND-0012 emitida e enviada por você às 10h40 · aguardando resposta até 19/11</b></div><div class="sec"><div class="st">Nota de devolução ND-0012 · chave 3526… </div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note"></div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-devolucao-ND-0012.json · abrir</div></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert ok"><b>Nota de devolução ND-0012 emitida e enviada por você às 10h40 · aguardando resposta até 19/11</b></div><div class="sec"><div class="st">Nota de devolução ND-0012 · chave 3526… </div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note"></div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-devolucao-ND-0012.json · abrir</div></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S8</span>Emitida, envio falhou</h3><p class="meta"><b>Quando:</b> A nota foi emitida (número gravado), mas o envio do e-mail falhou (status send_failed).</p><p class="meta"><b>O que mostra:</b> Alert de erro que diz as duas coisas, nessa ordem: a nota foi emitida, o e-mail não saiu, e o motivo. Um botão: &quot;Tentar enviar de novo&quot;, que reenvia o mesmo e-mail e não emite outra nota (AC-4). Não há Descartar: a nota já existe.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert err"><b>A nota ND-0012 foi emitida, mas o e-mail não saiu.</b><br>Motivo: a caixa de saída recusou o envio (endereço do fornecedor inválido). A nota não será emitida de novo.</div><div class="sec"><div class="st">Nota de devolução ND-0012 · chave 3526… </div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note"></div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn pri">Tentar enviar de novo</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert err"><b>A nota ND-0012 foi emitida, mas o e-mail não saiu.</b><br>Motivo: a caixa de saída recusou o envio (endereço do fornecedor inválido). A nota não será emitida de novo.</div><div class="sec"><div class="st">Nota de devolução ND-0012 · chave 3526… </div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note"></div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn pri">Tentar enviar de novo</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S9</span>Reenviando</h3><p class="meta"><b>Quando:</b> A pessoa clicou em &quot;Tentar enviar de novo&quot;.</p><p class="meta"><b>O que mostra:</b> Igual a S8, com o botão ocupado (&quot;Enviando…&quot;) e desabilitado. O Alert de erro continua até a resposta.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert err"><b>A nota ND-0012 foi emitida, mas o e-mail não saiu.</b><br>Motivo: a caixa de saída recusou o envio. Reenviando o e-mail; a nota não será emitida de novo.</div><div class="sec"><div class="st">Nota de devolução ND-0012 · chave 3526… </div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note"></div></div><div class="acts"><span class="btn pri dis busy">⟳ Enviando…</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert err"><b>A nota ND-0012 foi emitida, mas o e-mail não saiu.</b><br>Motivo: a caixa de saída recusou o envio. Reenviando o e-mail; a nota não será emitida de novo.</div><div class="sec"><div class="st">Nota de devolução ND-0012 · chave 3526… </div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note"></div></div><div class="acts"><span class="btn pri dis busy">⟳ Enviando…</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S10</span>Descartado por você</h3><p class="meta"><b>Quando:</b> A pessoa clicou em &quot;Descartar&quot; no rascunho.</p><p class="meta"><b>O que mostra:</b> Alert neutro &quot;Pedido descartado por você às 10h41&quot; e o botão &quot;Refazer&quot;. O texto do rascunho descartado não aparece (fica no banco, para auditoria). Nada foi emitido nem enviado.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert neu"><b>Pedido descartado por você às 10h41</b><br>Nada foi emitido nem enviado.</div><div class="acts"><span class="btn sec">Refazer</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert neu"><b>Pedido descartado por você às 10h41</b><br>Nada foi emitido nem enviado.</div><div class="acts"><span class="btn sec">Refazer</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S11</span>Rascunho descartado pelo verificador</h3><p class="meta"><b>Quando:</b> O texto do Claude trazia um número fora do catálogo de fatos e o sistema descartou o rascunho, registrando o motivo (AC-6).</p><p class="meta"><b>O que mostra:</b> Alert de aviso com o motivo em português, sem repetir o texto descartado, e &quot;Refazer&quot;. É diferente de S10: quem descartou foi o sistema, e a mensagem diz isso.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert warn"><b>O Claude não conseguiu escrever um pedido confiável.</b><br>O texto citava um valor que não bate com o banco, então o sistema o descartou. Nada foi emitido nem enviado.</div><div class="acts"><span class="btn sec">Refazer</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert warn"><b>O Claude não conseguiu escrever um pedido confiável.</b><br>O texto citava um valor que não bate com o banco, então o sistema o descartou. Nada foi emitido nem enviado.</div><div class="acts"><span class="btn sec">Refazer</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S12</span>Falha ao emitir</h3><p class="meta"><b>Quando:</b> A emissão falhou (a resposta traz erro, nada foi gravado).</p><p class="meta"><b>O que mostra:</b> O rascunho volta para S4, com um Alert de erro acima dele: &quot;Não consegui emitir a nota. Nada foi emitido nem enviado. Tente de novo.&quot; Os três botões voltam. Um 409 (outra pessoa emitiu antes) mostra &quot;Este pedido já foi tratado por outra pessoa&quot; e recarrega o bloco.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert err"><b>Não consegui emitir a nota.</b><br>Nada foi emitido nem enviado. Tente de novo em um minuto.</div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Descartar</span><span class="btn sec">Editar</span><span class="btn pri">Emitir e enviar</span></div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="alert err"><b>Não consegui emitir a nota.</b><br>Nada foi emitido nem enviado. Tente de novo em um minuto.</div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="acts"><span class="btn ghost">Descartar</span><span class="btn sec">Editar</span><span class="btn pri">Emitir e enviar</span></div></div></div></div></div></div></div>
+<div class="card"><h3><span class="code">S13</span>Sem nível para emitir (só leitura)</h3><p class="meta"><b>Quando:</b> A pessoa pode ver a proposta mas não tem o nível que a decide (canApprove falso), com o pedido em rascunho.</p><p class="meta"><b>O que mostra:</b> Proposta: o bloco aparece, só para leitura, com a nota e o e-mail do rascunho. Os botões são trocados por uma linha: &quot;Só quem tem nível Gerente emite e envia este pedido&quot; (mesmo padrão do Alert &quot;needsLevel&quot;). Nos estados S7, S8 e S10 a leitura é igual para todos; o botão &quot;Tentar enviar de novo&quot; e &quot;Refazer&quot; também somem sem o nível.</p><div class="pair"><div><div class="w">Gaveta no desktop · 530 px</div><div class="frame" style="width:530px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="alert warn"><b>Só quem tem o nível Gerente emite e envia este pedido.</b><br>Você pode ler o rascunho. A emissão fica com quem decide a proposta.</div></div></div></div></div><div><div class="w">Celular · 360 px</div><div class="frame" style="width:360px"><div class="drawer">
+<div class="ctx">Decisão registrada · dossiê · linha do tempo<br><span class="ctxa">✔ Decisão registrada: Ação final: receber parcial. O título está liberado parcialmente.</span></div>
+<div class="block"><div class="bh"><h4>Pedido ao fornecedor</h4><span class="ai">✦ Claude</span></div><div class="sec"><div class="st">Nota de devolução (rascunho) <span class="lock">🔒 travado</span></div>
+<dl class="dl"><div><dt>Para</dt><dd>Higiene Lume Indústria Ltda. (F04)</dd></div>
+<div><dt>Nota de referência</dt><dd>NF 47941 · CD-01</dd></div>
+<div class="item"><dt>Shampoo 350 ml</dt><dd>376 UN × R$ 16,90 = R$ 6.354,40</dd></div>
+<div class="tot"><dt>Total da devolução</dt><dd>R$ 6.354,40</dd></div></dl>
+<div class="note">Número da nota: definido ao emitir.</div></div><div class="sec"><div class="st">E-mail </div>
+<dl class="dl"><div><dt>Para</dt><dd>fiscal@higienelume.test</dd></div><div><dt>Prazo de resposta</dt><dd>19/11</dd></div>
+<div><dt>Assunto</dt><dd>NF 47941 · devolução do item trocado </dd></div></dl>
+<div class="mail">Olá, equipe da Higiene Lume.<br>Na NF 47941 veio Shampoo 350 ml (376 UN, R$ 6.354,40) no lugar do Sabonete em barra 85 g pedido.<br>Segue a nota de devolução do Shampoo. Pedimos a retirada do Shampoo e a entrega do Sabonete em barra 85 g (2.548 UN) até 19/11.</div>
+<div class="st2">O que pedimos <span class="lock">🔒 travado</span></div>
+<ol class="asks"><li>Retirar o Shampoo 350 ml (376 UN) da NF 47941.</li><li>Entregar o Sabonete em barra 85 g (2.548 UN), que é o item pedido.</li></ol>
+<div class="att">📎 nota-de-devolucao.json (gerada ao emitir)</div></div><div class="alert warn"><b>Só quem tem o nível Gerente emite e envia este pedido.</b><br>Você pode ler o rascunho. A emissão fica com quem decide a proposta.</div></div></div></div></div></div></div>
+<h2>Fluxo entre os estados</h2><div class="card"><pre>            (decisão com devolução registrada)
+                         │
+                         ▼
+                 ┌──────────────┐  erro de rede   ┌────────────────────┐
+                 │ S1 Carregando│────────────────▶│ S2 Erro ao carregar│
+                 └──────┬───────┘◀── Tentar de novo└────────────────────┘
+                        │ sem pedido ainda (404)
+                        ▼
+                 ┌──────────────┐ Cron escreve e o verificador aprova
+                 │ S3 Escrevendo│───────────────────────────┐
+                 └──────┬───────┘                           │
+        verificador     │ Cron escreve, número fora         ▼
+        reprova         │ do catálogo (AC-6)       ┌──────────────────┐◀─────────────────┐
+                        ▼                          │   S4 Rascunho    │                  │
+          ┌────────────────────────┐   Refazer     └─┬────┬───────┬───┘ Salvar texto /   │
+          │ S11 Descartado pelo    │──────▶ S3       │    │Editar │     Cancelar         │
+          │ verificador            │                 │    │       ▼                      │
+          └────────────────────────┘                 │    │  ┌────────────────┐          │
+                                                     │    │  │ S5 Editando    │──────────┘
+                                   Descartar         │    │  │ (S5b: recusado)│
+                ┌────────────────────────────────────┘    │  └────────────────┘
+                ▼                                         │ Emitir e enviar
+      ┌──────────────────┐   Refazer ──▶ S3               ▼
+      │ S10 Descartado   │                        ┌──────────────────┐ falha ao emitir ┌──────────────┐
+      │ por você         │                        │ S6 Emitindo e    │────────────────▶│ S12 Falha    │
+      └──────────────────┘                        │ enviando         │                 │ (volta S4)   │
+                                                  └───┬──────────┬───┘                 └──────────────┘
+                                         emitiu e     │          │ emitiu, e-mail falhou
+                                         enviou       ▼          ▼
+                                  ┌──────────────────┐   ┌─────────────────────┐
+                                  │ S7 Emitida e     │   │ S8 Emitida, envio   │◀──┐
+                                  │ enviada (fim)    │◀──│ falhou              │   │ falhou de novo
+                                  └──────────────────┘   └─────────┬───────────┘   │
+                                         enviou de novo            │ Tentar enviar │
+                                                                   ▼ de novo       │
+                                                         ┌──────────────────┐──────┘
+                                                         │ S9 Reenviando    │
+                                                         └──────────────────┘
+S13 (sem nível) é o mesmo bloco em leitura: não é um estado do fluxo, é um modo de qualquer estado.
+</pre><table><tr><th>De</th><th>Clique ou evento</th><th>Para</th></tr><tr><td>(decisão registrada)</td><td>abrir a gaveta</td><td>S1 Carregando</td></tr><tr><td>S1</td><td>pedido lido: nenhum ainda</td><td>S3 Escrevendo</td></tr><tr><td>S1</td><td>pedido lido: rascunho / emitido / descartado</td><td>S4 / S7 / S8 / S10 / S11, conforme o status</td></tr><tr><td>S1</td><td>leitura falhou</td><td>S2 Erro ao carregar</td></tr><tr><td>S2</td><td>clique em Tentar de novo</td><td>S1</td></tr><tr><td>S3</td><td>Cron escreve o rascunho e o verificador aprova (próxima abertura da gaveta)</td><td>S4 Rascunho</td></tr><tr><td>S3</td><td>Cron escreve e o verificador reprova (AC-6)</td><td>S11</td></tr><tr><td>S4</td><td>Editar</td><td>S5 Editando</td></tr><tr><td>S5</td><td>Salvar texto (válido)</td><td>S4 com o texto novo</td></tr><tr><td>S5</td><td>Salvar texto (número fora do catálogo)</td><td>S5b, texto da pessoa mantido</td></tr><tr><td>S5 / S5b</td><td>Cancelar</td><td>S4 com o texto anterior</td></tr><tr><td>S4</td><td>Descartar</td><td>S10 Descartado por você</td></tr><tr><td>S4</td><td>Emitir e enviar</td><td>S6 Emitindo e enviando</td></tr><tr><td>S6</td><td>emitiu e enviou</td><td>S7 Emitida e enviada</td></tr><tr><td>S6</td><td>emitiu, o envio falhou</td><td>S8</td></tr><tr><td>S6</td><td>a emissão falhou</td><td>S12, que mostra S4 com o aviso</td></tr><tr><td>S8</td><td>Tentar enviar de novo</td><td>S9 Reenviando</td></tr><tr><td>S9</td><td>enviou</td><td>S7</td></tr><tr><td>S9</td><td>falhou de novo</td><td>S8</td></tr><tr><td>S10 / S11</td><td>Refazer</td><td>S3 Escrevendo (o Cron seguinte escreve)</td></tr></table><p class="meta">AC-3: não há transição para S6 que não parta de um clique em "Emitir e enviar". Nenhum evento do Cron leva a emitir ou enviar.</p></div>
+<h2>Perguntas em aberto, com a recomendação</h2><div class="card"><b>1. &quot;Descartar&quot; pede confirmação?</b><p>Não. Nada foi emitido nem enviado, e &quot;Refazer&quot; desfaz o descarte. Um modal a mais custaria um clique em todo descarte para evitar um dano que não existe. Descartar fica como botão discreto (ghost) e longe do primário.</p></div><div class="card"><b>2. &quot;Refazer&quot; gera o novo rascunho no clique ou no Cron seguinte?</b><p>No Cron seguinte, como o plano aprovado diz (&quot;o rascunho sai na rodada do Cron seguinte, não no clique&quot;). O clique só marca o pedido como pendente e o bloco volta a S3 com a linha &quot;sai na próxima rodada&quot;. Gerar no clique pediria chamar o Claude dentro da requisição, o que o plano evita.</p></div><div class="card"><b>3. A lista do que pedimos aparece no rascunho?</b><p>Sim, como lista numerada e travada (🔒) abaixo do corpo. É o que o fornecedor tem de fazer, item a item, e a regra é quem a monta (AC-7): a pessoa vê o que está pedindo mesmo editando só o texto. A issue não a desenha; é um acréscimo meu ao wireframe dela.</p></div><div class="card"><b>4. O que mostrar no anexo antes da entrega 5 (PDF)?</b><p>A linha existe, com o nome e o estado do que realmente vai: &quot;nota-de-devolucao.json (gerada ao emitir)&quot;, e depois de emitir &quot;nota-devolucao-ND-0012.json · abrir&quot;. Na entrega 5 o nome troca para .pdf sem mudar a estrutura. Não desenhar um PDF que o sistema ainda não gera.</p></div><div class="card"><b>5. Quem sem nível vê o bloco, e como?</b><p>Quem lê a proposta vê o bloco em leitura (S13), sem botões, com a mesma linha de nível que a gaveta usa no formulário. Esconder o bloco faria o leitor achar que não há pedido. Recomendo que emitir, descartar, editar, refazer e reenviar sigam o mesmo nível que decide a proposta (canApprove).</p></div><div class="card"><b>6. A gaveta atualiza sozinha de &quot;Escrevendo&quot; para o rascunho?</b><p>Não: sem polling. O Cron roda a intervalos e a gaveta lê ao abrir; o texto de S3 diz que o rascunho sai na próxima rodada, e a pessoa reabre a gaveta. Um &quot;Atualizar&quot; no S3 é aceitável se o dono quiser, mas fica fora do desenho.</p></div><div class="card"><b>7. O assunto é editável?</b><p>Não, só o corpo (AC-7: &quot;só o texto do e-mail&quot;). O assunto leva o número da nota de origem, que é um número travado; o destinatário e o prazo também. Se o dono quiser editar o assunto, ele passa a ter marcas {{...}} como o corpo.</p></div><div class="card"><b>8. O número da nota (ND-0012) aparece no rascunho?</b><p>Não. O número só nasce ao emitir (a reserva está no emissor, ADR-003), então o rascunho diz &quot;Número da nota: definido ao emitir&quot;. Contradigo o wireframe da issue, que mostra ND-0012 e o PDF já nomeado no rascunho, porque o número ainda não existe nesse ponto.</p></div><div class="card"><b>9. &quot;Tentar enviar de novo&quot; tem limite?</b><p>Sem limite de cliques, mas o botão fica ocupado até a resposta (S9). O reenvio não emite outra nota (AC-4).</p></div>
+<h2>Fonte dos dados fictícios</h2><div class="card"><ul><li>Nota: data/kit/notas.json, NF-013 (número 47941, chave 35261100023027000111550010000479411353478484, destino CD-01, emitida em 2026-11-10). A nota traz Shampoo 350 ml (376 UN × R$ 16,90 = R$ 6.354,40) no lugar do Sabonete em barra 85 g da ordem OC (data/kit/ordens.json, 2.548 UN); classificação E2.</li><li>Fornecedor: data/kit/fornecedores.json, F04, Higiene Lume Indústria Ltda.</li><li>Inventado, e marcado como tal: o e-mail fiscal@higienelume.test (o kit ainda não tem e-mail; a issue diz que o kit ganha um de teste por fornecedor), o número ND-0012 (da issue), as horas 10h40 e 10h41, e o prazo 19/11 (3 dias úteis a partir da emissão em 16/11, a segunda-feira seguinte a hoje).</li></ul></div>
+<h2>Aprovação</h2><div class="card">Aprovado por: a pessoa dona do design, em 15/11/2026, como desenhado, com as recomendações das nove perguntas em aberto. A pergunta 8 (número ND e nome do anexo só depois de emitir) se afasta de propósito do wireframe ASCII da issue.</div></div></body></html>
