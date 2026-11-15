@@ -177,24 +177,24 @@ describe('nota de devolução da decisão', () => {
 
 describe('chave de acesso da NF-e', () => {
   it('o dígito verificador (módulo 11) bate com a chave de exemplo do manual da NF-e', () => {
-    const exemplo = '35080599999090910270550010000000015180051273';
-    expect(accessKeyCheckDigit(exemplo.slice(0, 43))).toBe(exemplo.slice(43));
+    const sample = '35080599999090910270550010000000015180051273';
+    expect(accessKeyCheckDigit(sample.slice(0, 43))).toBe(sample.slice(43));
   });
 
   it('o layout bate com o das chaves do kit: modelo 55 e emissão normal nas mesmas posições', () => {
-    const notas: unknown = JSON.parse(readFileSync(new URL('../../../data/kit/notas.json', import.meta.url), 'utf8'));
-    if (!Array.isArray(notas)) throw new Error('notas.json não é uma lista');
-    const keys = notas.map((n: unknown): string => {
+    const kitNotes: unknown = JSON.parse(readFileSync(new URL('../../../data/kit/notas.json', import.meta.url), 'utf8'));
+    if (!Array.isArray(kitNotes)) throw new Error('notas.json não é uma lista');
+    const keys = kitNotes.map((n: unknown): string => {
       const key = typeof n === 'object' && n !== null && 'chave' in n ? n.chave : undefined; // ADR-001
       if (typeof key !== 'string') throw new Error('notas.json: nota sem chave'); // ADR-001
       return key;
     });
-    const nossa = returnAccessKey({ ufCode: '35', issuedOn: '2026-11-15', issuerCnpj: ISSUER, series: 1, number: 12 });
+    const ours = returnAccessKey({ ufCode: '35', issuedOn: '2026-11-15', issuerCnpj: ISSUER, series: 1, number: 12 });
     expect(keys.length).toBeGreaterThan(0);
     for (const kitKey of keys) {
       expect(kitKey).toHaveLength(44);
-      expect(kitKey.slice(20, 22)).toBe(nossa.slice(20, 22));
-      expect(kitKey.slice(34, 35)).toBe(nossa.slice(34, 35));
+      expect(kitKey.slice(20, 22)).toBe(ours.slice(20, 22));
+      expect(kitKey.slice(34, 35)).toBe(ours.slice(34, 35));
     }
   });
 

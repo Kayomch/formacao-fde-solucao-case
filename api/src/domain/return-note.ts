@@ -157,8 +157,8 @@ export type IssueReturnNoteInput = {
   readonly issuedOn: string;
 };
 
-/** #156: reais com duas casas a partir de centavos inteiros, sem acumular ponto flutuante. */
-const reais = (cents: number): number => cents / 100;
+/** #156: valor em unidade monetária com duas casas a partir de centavos inteiros, sem acumular ponto flutuante. */
+const centsToMajor = (cents: number): number => cents / 100;
 
 /**
  * #156/AC-2: a nota de devolução no formato do kit, com só as linhas devolvidas e os dados do item da
@@ -183,8 +183,8 @@ export function issueReturnNote(input: IssueReturnNoteInput): ReturnNoteDocument
       descricao: item.description, // ADR-001
       quantidade: line.quantity.amount, // ADR-001
       unidade: line.quantity.unit, // ADR-001
-      preco_unitario: reais(item.unitPrice.cents), // ADR-001
-      valor: reais(cents), // ADR-001
+      preco_unitario: centsToMajor(item.unitPrice.cents), // ADR-001
+      valor: centsToMajor(cents), // ADR-001
     };
     return { cents, document };
   });
@@ -204,6 +204,6 @@ export function issueReturnNote(input: IssueReturnNoteInput): ReturnNoteDocument
     nota_referenciada: invoice.accessKey, // ADR-001, #156 (formato do kit estendido pela nota de devolução)
     natureza: 'devolucao', // ADR-001, #156 (formato do kit estendido pela nota de devolução)
     itens: rows.map((row) => row.document), // ADR-001
-    valor_total: reais(totalCents), // ADR-001
+    valor_total: centsToMajor(totalCents), // ADR-001
   };
 }
