@@ -13,6 +13,9 @@ import { SupabaseApprovalStore } from "../approval/supabase-store";
 import { publishDecidedDockActions, publishDecidedStoreActions } from "../dock/publish-decided";
 import { NO_FIGURES, recordRun, type RunFigures } from "../automation/runs";
 import { lastDaysUtc, publishApprovedUnregistered } from "./publish-approved-e8";
+import { erpReturnNoteOutbox } from "../connectors/erp-return-note";
+import { publishApprovedReturnNotes } from "../returns/publish-approved-return-notes";
+import { supabaseDecidedReturnSource } from "../returns/supabase-decided-return-source";
 
 /** #66 A janela, em dias, das decisões que o Cron manda ao Cadastro; ver `lastDaysUtc`. */
 const PUBLISH_WINDOW_DAYS = 7;
@@ -84,12 +87,13 @@ async function runRound(
   // #43 AC-1 O que a regra aprovou agora (e o que falhou na hora da aprovação) vai para a doca.
   const dock = await publishDock(rest);
   const storeActions = await publishStoreActions(rest);
+  const returnNotes = await publishReturnNotes(rest);
   const duplicates = await blockDuplicateTitles(rest); // #31/AC-5: o título da E6 fica bloqueado já na detecção.
   // #171 O Claude vai por último: é periférico, e a captura (o caminho crítico) fica com os subrequests da
   // invocação. As sugestões que ele grava aqui a próxima rodada lê. Falha fechada: a regra decide sozinha.
   await runClaudeRound(rest, env);
   console.log(
-    `cron: execução agendada (${controller.cron}); notas vistas ${result.seen}, novas ${result.inserted}, conferidas ${result.checked}, com erro ${result.failed}, propostas ${proposals.proposed}, aprovadas pela regra ${proposals.approvedByRule}, cadastro E8 ${cadastroE8}, ações publicadas na doca ${dock}, ações publicadas no app da loja ${storeActions}, títulos duplicados bloqueados ${duplicates.blocked}, com falha ${duplicates.failed}; recebimentos sem nota [${unreconciled.noKey.join(", ")}], com chave sem nota [${unreconciled.keyWithoutInvoice.join(", ")}]`,
+    `cron: execução agendada (${controller.cron}); notas vistas ${result.seen}, novas ${result.inserted}, conferidas ${result.checked}, com erro ${result.failed}, propostas ${proposals.proposed}, aprovadas pela regra ${proposals.approvedByRule}, cadastro E8 ${cadastroE8}, ações publicadas na doca ${dock}, ações publicadas no app da loja ${storeActions}, devoluções publicadas na fila de notas ${returnNotes}, títulos duplicados bloqueados ${duplicates.blocked}, com falha ${duplicates.failed}; recebimentos sem nota [${unreconciled.noKey.join(", ")}], com chave sem nota [${unreconciled.keyWithoutInvoice.join(", ")}]`,
   );
   const summary = {
     seen: result.seen,
@@ -164,6 +168,23 @@ async function publishStoreActions(rest: SupabaseRest): Promise<number> {
   } catch (error) {
     const status = error instanceof SupabaseRestError ? `HTTP ${error.status}` : "falha na publicação";
     console.log(`cron: app da loja indisponível (${status}); a próxima rodada repete`);
+    return 0;
+  }
+}
+
+/**
+ * #156/AC-2 Põe na fila de notas da #140 a devolução das decisões aprovadas. Se falha, registra uma linha só com o
+ * status e a rodada segue: a fila é idempotente e a próxima rodada repete. O número fica no log, sem coluna nova
+ * em automation_runs (#211), que pediria migração e mudança no web/.
+ */
+async function publishReturnNotes(rest: SupabaseRest): Promise<number> {
+  try {
+    const source = supabaseDecidedReturnSource(rest);
+    const log = (line: string): void => console.log(`cron: ${line}`);
+    return (await publishApprovedReturnNotes({ source, outbox: erpReturnNoteOutbox(rest), log })).published;
+  } catch (error) {
+    const status = error instanceof SupabaseRestError ? `HTTP ${error.status}` : "falha na publicação";
+    console.log(`cron: devoluções indisponíveis (${status}); a próxima rodada repete`);
     return 0;
   }
 }
