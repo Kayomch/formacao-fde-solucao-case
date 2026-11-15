@@ -8,6 +8,7 @@ import type { Evidence } from '../evidence.js';
 import type { InvoiceItem, InvoiceView } from '../invoice.js';
 import { Money } from '../money.js';
 import type { Proposal, ProposalProps } from '../proposal.js';
+import type { ReturnNote } from '../return-note.js';
 import type { Quantity } from '../quantity.js';
 import { findReceipt, orderOf, reconcile, type ReconciliationLine } from '../reconciliation.js';
 import type { Title } from '../title.js';
@@ -92,13 +93,6 @@ export function proposeE3(
   };
 }
 
-/** A nota de devolução da diferença. Mesma forma do `ReturnNoteMessage` da caixa de saída do ERP. */
-export type ReturnNote = {
-  readonly invoiceAccessKey: string;
-  readonly lines: readonly { readonly supplierCode: string; readonly quantity: Quantity }[];
-  readonly reason: string;
-};
-
 /**
  * #45/AC-4: a nota de devolução da proposta aprovada do E3, sem mudar nada. Só a proposta
  * `aprovada`: a `alterada` trocou a ação na doca e não é liquidada por aqui (#45, decisão no PR #92).
@@ -154,3 +148,5 @@ export function settleE3(
   reduceE3Title(proposal, title);
   return note;
 }
+
+export type { ReturnNote };
