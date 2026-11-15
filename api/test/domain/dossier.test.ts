@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   DOSSIER_OUTPUT_SCHEMA,
   buildFactCatalog,
+  catalogIdentifiers,
   catalogKeys,
   factKey,
+  invoiceFacts,
   dossierNotice,
   verifyAndRender,
   type DossierResult,
@@ -17,6 +19,22 @@ const render = (raw: unknown): DossierResult =>
   verifyAndRender(raw, catalog(), checkedInvoice().divergences, META);
 
 const withText = (field: 'summary' | 'supplier_history', text: string) => ({ ...goodRaw(), [field]: text });
+
+describe('fatos e identificadores compartilhados com o pedido ao fornecedor', () => {
+  it('#156/AC-6 os fatos da nota são número, série e os três fatos de cada item, todos da nota', () => {
+    const facts = invoiceFacts(checkedInvoice());
+    expect(facts['nota.numero']).toMatchObject({ label: 'Número da nota', source: 'invoice' });
+    expect(facts['nota.serie']).toMatchObject({ label: 'Série da nota', source: 'invoice' });
+    expect(facts['nota.item[A1].quantidade']).toEqual({ label: expect.stringContaining('Quantidade faturada de'), value: '12 CX', source: 'invoice' });
+    expect(facts['nota.item[A1].preco_unitario']?.value).toBe('R$ 100,00');
+    expect(facts['nota.item[A1].total']?.value).toBe('R$ 1.200,00');
+    expect(facts['nota.total']).toBeUndefined();
+  });
+
+  it('#156/AC-6 o número curto puro fica fora dos identificadores e o de oito dígitos ou texto entra', () => {
+    expect(catalogIdentifiers(['1234567', '12345678', 'A1', 'OC-100'])).toEqual(['12345678', 'A1', 'OC-100']);
+  });
+});
 
 describe('catálogo de fatos', () => {
   it('#38/AC-2 traz os números da nota, da ordem e do cadastro como estão no banco', () => {

@@ -153,9 +153,33 @@ const sum = (ms: readonly Money[]): Money => ms.reduce((acc, m) => acc.add(m), M
 /** #68: número curto puro (como o número da nota) só entra por marcador: senão passaria por quantidade. */
 const MIN_NUMERIC_IDENTIFIER = 8;
 
+/** #156: o filtro dos identificadores, um só para o catálogo do dossiê e o do pedido ao fornecedor. */
+export function catalogIdentifiers(ids: Iterable<string>): readonly string[] {
+  return Object.freeze([...ids].filter((v) => !(/^\d+$/.test(v) && v.length < MIN_NUMERIC_IDENTIFIER)));
+}
+
+/**
+ * #156: os fatos da nota que os dois catálogos compartilham: número, série e, por item, quantidade, preço
+ * unitário e total faturados, com os mesmos rótulos.
+ */
+export function invoiceFacts(invoice: InvoiceView): Record<string, Fact> {
+  const facts: Record<string, Fact> = {};
+  const put = (key: string, label: string, value: string): void => {
+    facts[key] = Object.freeze({ label, value, source: 'invoice' });
+  };
+  put(factKey.invoiceNumber(), 'Número da nota', invoice.number);
+  put(factKey.invoiceSeries(), 'Série da nota', invoice.series);
+  for (const item of invoice.items) {
+    put(factKey.invoiceItem(item.supplierCode, 'quantidade'), `Quantidade faturada de ${item.description}`, qty(item.quantity));
+    put(factKey.invoiceItem(item.supplierCode, 'preco_unitario'), `Preço unitário faturado de ${item.description}`, item.unitPrice.toString());
+    put(factKey.invoiceItem(item.supplierCode, 'total'), `Total faturado de ${item.description}`, item.total.toString());
+  }
+  return facts;
+}
+
 /** #68: monta o catálogo plano de fatos do banco para a nota e o fornecedor dela. */
 export function buildFactCatalog(invoice: InvoiceView, ctx: CheckContext): FactCatalog {
-  const facts: Record<string, Fact> = {};
+  const facts: Record<string, Fact> = invoiceFacts(invoice);
   const ids = new Set<string>();
   const put = (key: string, label: string, value: string, source: FactSource) => {
     facts[key] = Object.freeze({ label, value, source });
@@ -164,14 +188,9 @@ export function buildFactCatalog(invoice: InvoiceView, ctx: CheckContext): FactC
     for (const v of values) if (v) ids.add(v);
   };
 
-  put(factKey.invoiceNumber(), 'Número da nota', invoice.number, 'invoice');
-  put(factKey.invoiceSeries(), 'Série da nota', invoice.series, 'invoice');
   put(factKey.invoiceTotal(), 'Valor total da nota', invoice.total.toString(), 'invoice');
   id(invoice.accessKey, invoice.supplierId, invoice.store, invoice.issuedOn, invoice.purchaseOrderRef);
   for (const item of invoice.items) {
-    put(factKey.invoiceItem(item.supplierCode, 'quantidade'), `Quantidade faturada de ${item.description}`, qty(item.quantity), 'invoice');
-    put(factKey.invoiceItem(item.supplierCode, 'preco_unitario'), `Preço unitário faturado de ${item.description}`, item.unitPrice.toString(), 'invoice');
-    put(factKey.invoiceItem(item.supplierCode, 'total'), `Total faturado de ${item.description}`, item.total.toString(), 'invoice');
     id(item.supplierCode, item.sku);
   }
   for (const d of invoice.divergences) {
@@ -226,8 +245,7 @@ export function buildFactCatalog(invoice: InvoiceView, ctx: CheckContext): FactC
   put(factKey.paymentValue(), 'Valor pago ao fornecedor', sum(payments.map((p) => p.amount)).toString(), 'history');
   put(factKey.capturedCount(), 'Outras notas do fornecedor capturadas', String(captured.length), 'history');
 
-  const identifiers = [...ids].filter((v) => !(/^\d+$/.test(v) && v.length < MIN_NUMERIC_IDENTIFIER));
-  return Object.freeze({ facts: Object.freeze(facts), identifiers: Object.freeze(identifiers) });
+  return Object.freeze({ facts: Object.freeze(facts), identifiers: catalogIdentifiers(ids) });
 }
 
 type RawDivergence = { classification: string; what_diverges: string; evidence: string[] };

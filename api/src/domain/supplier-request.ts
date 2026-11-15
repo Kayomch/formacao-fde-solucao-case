@@ -1,6 +1,8 @@
 import type { Classification } from './classification.js';
 import {
+  catalogIdentifiers,
   factKey,
+  invoiceFacts,
   renderText,
   textProblem,
   type Fact,
@@ -96,9 +98,6 @@ export function dueOnAfter(date: string): string {
   return new Date(at).toISOString().slice(0, 10);
 }
 
-/** #156: um número curto puro (como o da nota) só entra por marcador: senão passaria por quantidade. */
-const MIN_NUMERIC_IDENTIFIER = 8;
-
 /**
  * #156/AC-6: o catálogo de fatos do pedido: a nota de origem (número, série, itens) e a nota de devolução
  * (linhas, preço, valor e total). O total tem de ser o valor da devolução na fila da #140; o valor da
@@ -110,18 +109,12 @@ export function buildSupplierRequestCatalog(
   dueOn: string,
   queueValue: Money,
 ): FactCatalog {
-  const facts: Record<string, Fact> = {};
+  const facts: Record<string, Fact> = invoiceFacts(invoice);
   const ids = new Set<string>([invoice.accessKey, invoice.supplierId, invoice.store, invoice.issuedOn, dueOn]);
   const put = (key: string, label: string, value: string, source: Fact['source']): void => {
     facts[key] = Object.freeze({ label, value, source });
   };
-  put(factKey.invoiceNumber(), 'Número da nota', invoice.number, 'invoice');
-  put(factKey.invoiceSeries(), 'Série da nota', invoice.series, 'invoice');
   for (const item of invoice.items) {
-    const qty = `${item.quantity.amount} ${item.quantity.unit}`;
-    put(factKey.invoiceItem(item.supplierCode, 'quantidade'), `Quantidade faturada de ${item.description}`, qty, 'invoice');
-    put(factKey.invoiceItem(item.supplierCode, 'preco_unitario'), `Preço unitário faturado de ${item.description}`, item.unitPrice.toString(), 'invoice');
-    put(factKey.invoiceItem(item.supplierCode, 'total'), `Total faturado de ${item.description}`, item.total.toString(), 'invoice');
     ids.add(item.supplierCode);
     if (item.sku) ids.add(item.sku);
   }
@@ -142,8 +135,7 @@ export function buildSupplierRequestCatalog(
     throw new DomainError(`Pedido ao fornecedor: o total ${totalCents} da devolução difere do valor na fila ${queueValue.cents}`);
   }
   put(factKey.returnTotal(), 'Valor total da devolução', queueValue.toString(), 'return_note');
-  const identifiers = [...ids].filter((v) => !(/^\d+$/.test(v) && v.length < MIN_NUMERIC_IDENTIFIER));
-  return Object.freeze({ facts: Object.freeze(facts), identifiers: Object.freeze(identifiers) });
+  return Object.freeze({ facts: Object.freeze(facts), identifiers: catalogIdentifiers(ids) });
 }
 
 /** #156: o schema da saída estruturada do Claude: só o assunto e o corpo, com os números como `{{chave}}`. */
@@ -209,8 +201,11 @@ const INVOICE_NUMBER_MARKER = `{{${factKey.invoiceNumber()}}}`;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+/** #156: a resposta do Claude já lida; as chaves vêm do `required` do esquema, então mudar o esquema quebra o parser. */
+type SupplierEmail = Readonly<Record<(typeof SUPPLIER_REQUEST_OUTPUT_SCHEMA.required)[number], string>>;
+
 /** #156: lê só `subject` e `body`; qualquer outro campo é descartado, nunca copiado. */
-function parseEmail(raw: unknown): { subject: string; body: string } | null {
+function parseEmail(raw: unknown): SupplierEmail | null {
   if (!isRecord(raw)) return null;
   const { subject, body } = raw;
   if (typeof subject !== 'string' || typeof body !== 'string') return null;
