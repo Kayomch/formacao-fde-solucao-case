@@ -8,6 +8,7 @@ export class FakePostgrest {
   readonly tables = new Map<string, Row[]>();
   readonly requests: { method: string; url: string; headers: Record<string, string> }[] = [];
   private nextId = 1;
+  private nextNumber = 1;
 
   constructor(seed: Record<string, Row[]> = {}) {
     for (const [t, rows] of Object.entries(seed)) this.tables.set(t, rows.map((r) => ({ ...r })));
@@ -106,8 +107,16 @@ export class FakePostgrest {
         cancel_justification: null,
         cancelled_by: null,
         cancelled_at: null,
+        // #156 As colunas da nota emitida, nulas até a emissão.
+        note_document: null,
+        note_id: null,
+        note_access_key: null,
+        note_series: null,
+        note_number: null,
       };
     }
+    // #156 A reserva do número: a identidade da coluna `number` e o carimbo da reserva.
+    if (table === 'return_note_numbers') return { number: this.nextNumber++, reserved_at: now };
     if (table.startsWith('outbox_')) return { id: this.nextId++, published_at: now };
     if (table === 'invoices') return { captured_at: now, classification: null, checked_at: null };
     // #63 As colunas com default da migração do domínio e da aprovação.

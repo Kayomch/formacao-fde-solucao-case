@@ -1,0 +1,67 @@
+# Registro dos modos de persistência (#156): uma entrada por tabela que um desenho de persistência
+# declarou. Fica ao lado das migrações e é versionado com elas; quem revisa persistência compara o
+# que cada tabela declara com o que os adaptadores gravam nela. As chaves são em inglês; as
+# descrições, em português.
+#
+# mode:     append-only | upsert-with-history | ephemeral
+# history:  onde mora a história de uma tabela upsert (none para append-only e ephemeral)
+# growth:   fixed só para tabela de consulta que só as migrações gravam
+#
+# Este registro nasceu com o desenho da #156 (supabase/persistence-156-return-note-emission.md) e
+# declara só as tabelas daquele desenho. As demais tabelas das migrações ainda não têm modo
+# declarado; cada uma entra aqui pelo desenho que a tocar a seguir.
+
+database: postgresql 17 # supabase/config.toml, [db] major_version; Supabase hospedado
+migrations: supabase/migrations
+
+strategies:
+  # Não há unidade de trabalho com BEGIN/COMMIT: o Worker fala com o banco só pelo PostgREST
+  # (api/src/connectors/supabase-rest.ts), e cada requisição roda numa transação própria
+  # (PostgREST, Transactions). Um caso de uso que grava em duas requisições é desenhado para
+  # ficar correto se parar entre elas (idempotência e PATCH condicional), não por uma transação.
+  unit_of_work: one PostgREST request per statement (api/src/connectors/supabase-rest.ts)
+  tenancy:
+    strategy: none # não há inquilino: um só cliente, a Já Chegou
+  # Acesso: RLS ligado e nenhuma política em toda tabela; só a chave secreta do Worker lê e grava
+  # (#59, AC-6). Toda tabela nova segue igual.
+  row_security: enabled, no policy (#59 AC-6)
+  # Nomes: ADR-001 (o que copia o kit, com o marcador -- ADR-001) e ADR-002 (literais do modelo,
+  # com o marcador -- ADR-002); o resto em inglês.
+  naming: [ADR-001, ADR-002]
+  money: centavos em bigint (#59)
+
+tables:
+  outbox_return_notes:
+    # A entrada da fila de devolução (#140). Nasce pendente e faz uma única transição, para
+    # emitida ou cancelada; nenhuma escrita toca uma linha que já saiu de pendente.
+    mode: upsert-with-history
+    # A história fica na própria linha: o estado antes da única transição é sempre `pendente` com
+    # as colunas da transição nulas, e a transição grava quem e quando (emitted_by/at ou
+    # cancelled_by/at) e o que (nfe_number e a nota emitida, ou a justificativa). Não é uma das
+    # formas de docs/entity-history.md; o desenho diz por quê e o que muda se a máquina de estados
+    # ganhar uma segunda transição.
+    history: in-row-transition # decisão em ADR-003 (a)
+    # O status faz o papel de versão: só `pendente` aceita escrita, e todo PATCH filtra
+    # status=eq.pendente (return-notes.ts da #140 e markEmitted da #156).
+    version_column: status
+    tenant: none
+    indexes:
+      outbox_return_notes_pkey: find e markEmitted por id (Q-E1, Q-E3); a leitura da caixa em ordem de id (Q-P3)
+      outbox_return_notes_status_idx: a fila da #140 por status, em ordem de id
+      outbox_return_notes_idempotency_key_key: unicidade da publicação (#59)
+      outbox_return_notes_note_id_key: unicidade do nota_id emitido
+      outbox_return_notes_note_access_key_key: unicidade da chave de acesso emitida
+
+  return_note_numbers:
+    # A reserva do número da nota de devolução emitida pelo mock: o fato "o número N ficou com a
+    # entrada E". Uma reserva por entrada; nunca muda.
+    mode: append-only
+    history: none
+    tenant: none
+    refusal: grant # UPDATE, DELETE e TRUNCATE revogados de anon, authenticated e service_role na migração; o cascade do reset roda como o dono (ADR-003, c)
+    # Não há projeção: a reserva é lida pela própria chave (return_note_id). PER-6 não se aplica
+    # a uma leitura de uma linha pelo seu fato, e o desenho diz por quê.
+    projection: none
+    indexes:
+      return_note_numbers_pkey: unicidade do número
+      return_note_numbers_return_note_id_key: árbitro do on_conflict da reserva (Q-R2), a leitura da reserva por entrada (Q-R1, Q-R3) e o cascade da exclusão da entrada
