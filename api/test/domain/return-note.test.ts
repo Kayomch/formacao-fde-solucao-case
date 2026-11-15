@@ -8,6 +8,7 @@ import {
   Money,
   Proposal,
   Quantity,
+  Title,
   accessKeyCheckDigit,
   issueReturnNote,
   returnAccessKey,
@@ -16,6 +17,7 @@ import {
   type PartialLine,
   type Unit,
 } from '../../src/domain/index.js';
+import { e3ReturnNote } from '../../src/domain/checks/e3-quantidade-menor.js';
 
 const ORIGIN_KEY = '35261100000000000000550010000099991000099999';
 const ISSUER = '12345678000195';
@@ -102,6 +104,31 @@ describe('nota de devolução da decisão', () => {
     expect(returnNoteOfDecision(approved('E3', [giveBack('SKU-1', 5)], 'altered'), invoice())).not.toBeNull();
   });
 
+  it('as razões de E1 e E2 seguem o estilo da E3', () => {
+    expect(returnNoteOfDecision(approved('E1', [giveBack('SKU-1', 5)]), invoice())?.reason).toBe(
+      'E1 falta física na nota 9999: devolução do que faltou',
+    );
+    expect(returnNoteOfDecision(approved('E2', [giveBack('SKU-1', 5)]), invoice())?.reason).toBe(
+      'E2 item trocado na nota 9999: devolução do item trocado',
+    );
+  });
+
+  it('a E3 aprovada dá a mesma nota por returnNoteOfDecision e por e3ReturnNote, para o hash da fila bater', () => {
+    const proposal = approved('E3', [giveBack('SKU-1', 10)]);
+    const line = {
+      supplierCode: 'F08-001',
+      sku: 'SKU-1',
+      invoiced: Quantity.of(72, 'UN'),
+      counted: Quantity.of(62, 'UN'),
+      missing: Quantity.of(10, 'UN'),
+    };
+    const title = Title.post({ invoiceAccessKey: ORIGIN_KEY, amount: Money.ofCents(88_288), dueOn: '2026-12-10' });
+    const canonical = returnNoteOfDecision(proposal, invoice());
+    const fromE3 = e3ReturnNote(proposal, title, invoice(), [line]);
+    expect(canonical).toEqual(fromE3);
+    expect(JSON.stringify(canonical)).toBe(JSON.stringify(fromE3));
+  });
+
   it('não devolve de outra classificação', () => {
     expect(returnNoteOfDecision(approved('E4', [giveBack('SKU-1', 5)]), invoice())).toBeNull();
   });
@@ -155,13 +182,19 @@ describe('chave de acesso da NF-e', () => {
   });
 
   it('o layout bate com o das chaves do kit: modelo 55 e emissão normal nas mesmas posições', () => {
-    const notas = JSON.parse(readFileSync(new URL('../../../data/kit/notas.json', import.meta.url), 'utf8')) as { chave: string }[]; // ADR-001
+    const notas: unknown = JSON.parse(readFileSync(new URL('../../../data/kit/notas.json', import.meta.url), 'utf8'));
+    if (!Array.isArray(notas)) throw new Error('notas.json não é uma lista');
+    const keys = notas.map((n: unknown): string => {
+      const key = typeof n === 'object' && n !== null && 'chave' in n ? n.chave : undefined; // ADR-001
+      if (typeof key !== 'string') throw new Error('notas.json: nota sem chave'); // ADR-001
+      return key;
+    });
     const nossa = returnAccessKey({ ufCode: '35', issuedOn: '2026-11-15', issuerCnpj: ISSUER, series: 1, number: 12 });
-    expect(notas.length).toBeGreaterThan(0);
-    for (const { chave } of notas) {
-      expect(chave).toHaveLength(44);
-      expect(chave.slice(20, 22)).toBe(nossa.slice(20, 22));
-      expect(chave.slice(34, 35)).toBe(nossa.slice(34, 35));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const kitKey of keys) {
+      expect(kitKey).toHaveLength(44);
+      expect(kitKey.slice(20, 22)).toBe(nossa.slice(20, 22));
+      expect(kitKey.slice(34, 35)).toBe(nossa.slice(34, 35));
     }
   });
 
@@ -201,7 +234,7 @@ describe('nota de devolução emitida, no formato do kit', () => {
           { supplierCode: 'F08-001', quantity: Quantity.of(10, 'UN') },
           { supplierCode: 'F08-002', quantity: Quantity.of(3, 'UN') },
         ],
-        valueCents: 8490 + 2910,
+        value: Money.ofCents(8490 + 2910),
       },
       invoice: invoice(),
       issuerCnpj: ISSUER,
@@ -216,7 +249,7 @@ describe('nota de devolução emitida, no formato do kit', () => {
     const note = emit();
     expect(note).toEqual({
       nota_id: 'ND-0012',
-      chave: key,
+      chave: key, // ADR-001
       numero: 12,
       serie: 1,
       emitente: ISSUER,
@@ -237,13 +270,21 @@ describe('nota de devolução emitida, no formato do kit', () => {
     expect(emit().valor_total * 100).toBeCloseTo(11_400, 6);
   });
 
+  it('#156/AC-2: o valor de uma linha com quantidade fracionária arredonda como a fila da #140', () => {
+    const note = emit({
+      queue: { lines: [{ supplierCode: 'F08-001', quantity: Quantity.of(0.5, 'UN') }], value: Money.ofCents(Math.round(849 * 0.5)) },
+    });
+    expect(note.itens[0]?.valor).toBe(4.25);
+    expect(note.valor_total).toBe(4.25);
+  });
+
   it('é JSON puro: sobrevive a serializar e ler de volta', () => {
     const note = emit();
     expect(JSON.parse(JSON.stringify(note))).toEqual(note);
   });
 
   it('recusa linha que não está na nota de origem', () => {
-    expect(() => emit({ queue: { lines: [{ supplierCode: 'F99-001', quantity: Quantity.of(1, 'UN') }], valueCents: 100 } })).toThrow(DomainError);
+    expect(() => emit({ queue: { lines: [{ supplierCode: 'F99-001', quantity: Quantity.of(1, 'UN') }], value: Money.ofCents(100) } })).toThrow(DomainError);
   });
 
   it('recusa chave que não tem 44 dígitos', () => {
@@ -251,10 +292,10 @@ describe('nota de devolução emitida, no formato do kit', () => {
   });
 
   it('#156/AC-2: recusa valor_total diferente do valor da devolução na fila', () => {
-    expect(() => emit({ queue: { lines: [{ supplierCode: 'F08-001', quantity: Quantity.of(10, 'UN') }], valueCents: 1 } })).toThrow(DomainError);
+    expect(() => emit({ queue: { lines: [{ supplierCode: 'F08-001', quantity: Quantity.of(10, 'UN') }], value: Money.ofCents(1) } })).toThrow(DomainError);
   });
 
-  it('#156/AC-4: a mesma entrada da fila com o mesmo número e chave dá o mesmo documento', () => {
+  it('a mesma entrada da fila com o mesmo número e chave dá o mesmo documento', () => {
     expect(emit()).toEqual(emit());
   });
 });

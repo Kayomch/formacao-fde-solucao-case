@@ -1,18 +1,32 @@
 import { DomainError } from './errors.js';
 import type { InvoiceItem, InvoiceView } from './invoice.js';
+import type { Money } from './money.js';
 import type { Proposal } from './proposal.js';
 import type { Quantity } from './quantity.js';
 
-/** A nota de devolução da decisão. Mesma forma do `ReturnNoteMessage` da caixa de saída do ERP. */
+/** #156: a nota de devolução da decisão. Mesma forma do `ReturnNoteMessage` da caixa de saída do ERP. */
 export type ReturnNote = {
   readonly invoiceAccessKey: string;
   readonly lines: readonly { readonly supplierCode: string; readonly quantity: Quantity }[];
   readonly reason: string;
 };
 
-const RETURNING = new Set(['E1', 'E2', 'E3']);
+/** #156: a razão da devolução por classificação. A da E3 é a de `e3ReturnNote` (#45), byte a byte: o hash da fila é o do conteúdo. */
+const REASON_WHAT = {
+  E1: 'falta física',
+  E2: 'item trocado',
+  E3: 'quantidade menor',
+} as const;
+const REASON_TAIL = {
+  E1: 'devolução do que faltou',
+  E2: 'devolução do item trocado',
+  E3: 'devolução da diferença',
+} as const;
 
-/** A chave da linha da doca: o SKU do item, ou o código do fornecedor quando não há SKU (E8). */
+const isReturning = (classification: string): classification is keyof typeof REASON_WHAT =>
+  classification === 'E1' || classification === 'E2' || classification === 'E3';
+
+/** #156: a chave da linha da doca: o SKU do item, ou o código do fornecedor quando não há SKU (E8). */
 const keyOf = (item: InvoiceItem): string => item.sku ?? item.supplierCode;
 
 /**
@@ -21,7 +35,8 @@ const keyOf = (item: InvoiceItem): string => item.sku ?? item.supplierCode;
  * A razão é texto fixo: a chave de idempotência da caixa de saída é o hash do conteúdo.
  */
 export function returnNoteOfDecision(proposal: Proposal, invoice: InvoiceView): ReturnNote | null {
-  if (!RETURNING.has(proposal.classification)) return null;
+  const classification = proposal.classification;
+  if (!isReturning(classification)) return null;
   if (proposal.state !== 'aprovada' && proposal.state !== 'alterada') return null;
   const action = proposal.dockAction;
   if (action.kind !== 'receber_parcial') return null;
@@ -43,14 +58,14 @@ export function returnNoteOfDecision(proposal: Proposal, invoice: InvoiceView): 
   return {
     invoiceAccessKey: invoice.accessKey,
     lines,
-    reason: `${proposal.classification} na nota ${invoice.number}: devolução das linhas devolvidas`,
+    reason: `${classification} ${REASON_WHAT[classification]} na nota ${invoice.number}: ${REASON_TAIL[classification]}`,
   };
 }
 
-/** Os pesos do módulo 11 da NF-e: 2 a 9, da direita para a esquerda. */
+/** #156: os pesos do módulo 11 da NF-e: 2 a 9, da direita para a esquerda. */
 const WEIGHTS = [2, 3, 4, 5, 6, 7, 8, 9];
 
-/** O dígito verificador da chave de acesso: módulo 11 sobre os 43 dígitos; resto 0 ou 1 dá 0. */
+/** #156: o dígito verificador da chave de acesso: módulo 11 sobre os 43 dígitos; resto 0 ou 1 dá 0. */
 export function accessKeyCheckDigit(first43: string): string {
   if (!/^\d{43}$/.test(first43)) throw new DomainError('Chave de acesso: o dígito verificador pede 43 dígitos');
   let sum = 0;
@@ -63,7 +78,7 @@ export function accessKeyCheckDigit(first43: string): string {
 
 export type AccessKeyParts = {
   readonly ufCode: string;
-  /** AAAA-MM-DD */
+  /** #156: AAAA-MM-DD */
   readonly issuedOn: string;
   readonly issuerCnpj: string;
   readonly series: number;
@@ -72,7 +87,7 @@ export type AccessKeyParts = {
 
 const pad = (value: number, size: number): string => String(value).padStart(size, '0');
 
-/** O código numérico de 8 dígitos sai das demais partes (FNV-1a), sem sorteio e sem relógio. */
+/** #156: o código numérico de 8 dígitos sai das demais partes (FNV-1a), sem sorteio e sem relógio. */
 function numericCode(base: string): string {
   let hash = 0x811c9dc5;
   for (const char of base) {
@@ -101,7 +116,7 @@ export function returnAccessKey(parts: AccessKeyParts): string {
   return `${first43}${accessKeyCheckDigit(first43)}`;
 }
 
-/** O formato das notas do kit (`data/kit/notas.json`) mais os campos da devolução. */
+/** #156: o formato das notas do kit (`data/kit/notas.json`) mais os campos da devolução. */
 export type ReturnNoteItemDocument = {
   readonly codigo_fornecedor: string; // ADR-001
   readonly sku: string | null; // ADR-001
@@ -117,32 +132,32 @@ export type ReturnNoteDocument = {
   readonly chave: string; // ADR-001
   readonly numero: number; // ADR-001
   readonly serie: number; // ADR-001
-  readonly emitente: string; // ADR-001
+  readonly emitente: string; // ADR-001, #156 (formato do kit estendido pela nota de devolução)
   readonly fornecedor_id: string; // ADR-001
   readonly destino: string; // ADR-001
   readonly data_emissao: string; // ADR-001
-  readonly nota_referenciada: string; // ADR-001
-  readonly natureza: 'devolucao'; // ADR-001
+  readonly nota_referenciada: string; // ADR-001, #156 (formato do kit estendido pela nota de devolução)
+  readonly natureza: 'devolucao'; // ADR-001, #156 (formato do kit estendido pela nota de devolução)
   readonly itens: readonly ReturnNoteItemDocument[]; // ADR-001
   readonly valor_total: number; // ADR-001
 };
 
 export type IssueReturnNoteInput = {
-  /** A entrada da fila da #140: as linhas e o valor da devolução, em centavos. */
+  /** #156: a entrada da fila da #140: as linhas e o valor da devolução. */
   readonly queue: {
     readonly lines: readonly { readonly supplierCode: string; readonly quantity: Quantity }[];
-    readonly valueCents: number;
+    readonly value: Money;
   };
   readonly invoice: InvoiceView;
   readonly issuerCnpj: string;
   readonly number: number;
   readonly series: number;
   readonly accessKey: string;
-  /** AAAA-MM-DD */
+  /** #156: AAAA-MM-DD */
   readonly issuedOn: string;
 };
 
-/** Reais com duas casas a partir de centavos inteiros, sem acumular ponto flutuante. */
+/** #156: reais com duas casas a partir de centavos inteiros, sem acumular ponto flutuante. */
 const reais = (cents: number): number => cents / 100;
 
 /**
@@ -160,34 +175,35 @@ export function issueReturnNote(input: IssueReturnNoteInput): ReturnNoteDocument
     if (item.quantity.unit !== line.quantity.unit) {
       throw new DomainError(`Nota de devolução: a linha ${line.supplierCode} está em outra unidade que a da nota`);
     }
+    // #156: o arredondamento é o da fila da #140 (return-notes.ts); a quantidade em CX passada a UN pode ser fracionária.
     const cents = Math.round(item.unitPrice.cents * line.quantity.amount);
     const document: ReturnNoteItemDocument = {
-      codigo_fornecedor: item.supplierCode,
+      codigo_fornecedor: item.supplierCode, // ADR-001
       sku: item.sku,
-      descricao: item.description,
-      quantidade: line.quantity.amount,
-      unidade: line.quantity.unit,
-      preco_unitario: reais(item.unitPrice.cents),
-      valor: reais(cents),
+      descricao: item.description, // ADR-001
+      quantidade: line.quantity.amount, // ADR-001
+      unidade: line.quantity.unit, // ADR-001
+      preco_unitario: reais(item.unitPrice.cents), // ADR-001
+      valor: reais(cents), // ADR-001
     };
     return { cents, document };
   });
   const totalCents = rows.reduce((sum, row) => sum + row.cents, 0);
-  if (totalCents !== queue.valueCents) {
-    throw new DomainError(`Nota de devolução: o total ${totalCents} difere do valor da devolução na fila ${queue.valueCents}`);
+  if (totalCents !== queue.value.cents) {
+    throw new DomainError(`Nota de devolução: o total ${totalCents} difere do valor da devolução na fila ${queue.value.cents}`);
   }
   return {
-    nota_id: `ND-${pad(input.number, 4)}`,
-    chave: input.accessKey,
-    numero: input.number,
-    serie: input.series,
-    emitente: input.issuerCnpj,
-    fornecedor_id: invoice.supplierId,
-    destino: invoice.store,
-    data_emissao: input.issuedOn,
-    nota_referenciada: invoice.accessKey,
-    natureza: 'devolucao',
-    itens: rows.map((row) => row.document),
-    valor_total: reais(totalCents),
+    nota_id: `ND-${pad(input.number, 4)}`, // ADR-001
+    chave: input.accessKey, // ADR-001
+    numero: input.number, // ADR-001
+    serie: input.series, // ADR-001
+    emitente: input.issuerCnpj, // ADR-001, #156 (formato do kit estendido pela nota de devolução)
+    fornecedor_id: invoice.supplierId, // ADR-001
+    destino: invoice.store, // ADR-001
+    data_emissao: input.issuedOn, // ADR-001
+    nota_referenciada: invoice.accessKey, // ADR-001, #156 (formato do kit estendido pela nota de devolução)
+    natureza: 'devolucao', // ADR-001, #156 (formato do kit estendido pela nota de devolução)
+    itens: rows.map((row) => row.document), // ADR-001
+    valor_total: reais(totalCents), // ADR-001
   };
 }
