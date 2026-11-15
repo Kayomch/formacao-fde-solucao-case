@@ -4,7 +4,7 @@ import type { DecidedReturnSource } from './ports.js';
 import {
   basisOf,
   decisionOf,
-  dueOnOf,
+  dueOnOfInput,
   invoiceKeyOf,
   skipLine,
   type Decision,
@@ -31,8 +31,8 @@ export type DraftCounts = { drafted: number; discarded: number; refused: number;
 
 /**
  * #156/AC-1, #156/AC-6, #156/AC-8: grava o rascunho, ou o descarte com o motivo, de cada sugestão ok cuja
- * nota ainda não tem pedido, de qualquer status. O catálogo, as perguntas, o contato e o prazo vêm do banco
- * e da regra; da sugestão só o assunto e o corpo. Uma gravação recusada pela regra do pedido aberto
+ * nota ainda não tem pedido, de qualquer status. O catálogo, as perguntas e o contato vêm do banco e da
+ * regra, e o prazo do `input` dado ao Claude, não do relógio de agora; da sugestão só o assunto e o corpo. Uma gravação recusada pela regra do pedido aberto
  * (#156/AC-8) é contada e a rodada segue.
  */
 export async function draftSupplierRequests(deps: DraftSupplierRequestsDeps): Promise<DraftCounts> {
@@ -50,9 +50,8 @@ export async function draftSupplierRequests(deps: DraftSupplierRequestsDeps): Pr
     (await deps.requests.listFor(keys)).filter((r) => r.requestType === 'return_note').map((r) => r.invoiceAccessKey),
   );
   const values = await deps.queue.valuesOf(keys);
-  const dueOn = dueOnOf(deps.now());
   for (const suggestion of suggestions) {
-    const outcome = await draftOne(deps, { suggestion, decisions, known, values, dueOn, log });
+    const outcome = await draftOne(deps, { suggestion, decisions, known, values, log });
     counts[outcome] += 1;
     if (outcome !== 'skipped') known.add(invoiceKeyOf(suggestion.key) ?? '');
   }
@@ -64,7 +63,6 @@ type Round = {
   readonly decisions: ReadonlyMap<string, Decision>;
   readonly known: ReadonlySet<string>;
   readonly values: ReadonlyMap<string, Money>;
-  readonly dueOn: string;
   readonly log: (line: string) => void;
 };
 
@@ -79,7 +77,12 @@ async function draftOne(deps: DraftSupplierRequestsDeps, round: Round): Promise<
     log(skipLine(suggestion.key, 'no_contact'));
     return 'skipped';
   }
-  const basis = basisOf(decision, value, round.dueOn, log);
+  const dueOn = dueOnOfInput(suggestion.input);
+  if (dueOn === null) {
+    log(skipLine(suggestion.key, 'invalid_input'));
+    return 'skipped';
+  }
+  const basis = basisOf(decision, value, dueOn, log);
   if (basis === null) return 'skipped';
   const request = draftSupplierRequest({
     raw: suggestion.output,

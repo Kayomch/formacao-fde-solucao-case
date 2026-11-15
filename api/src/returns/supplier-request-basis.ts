@@ -29,6 +29,20 @@ export function invoiceKeyOf(requestKey: string): string | null {
 /** #156: o prazo de resposta: 3 dias úteis depois do dia de Brasília do instante dado. */
 export const dueOnOf = (now: Date): string => dueOnAfter(brasiliaDate(now.toISOString()));
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * #156/AC-1, #156/AC-6: o prazo que o `input` da sugestão guardou, o dado ao Claude; `null` quando falta ou não é
+ * uma data do calendário em AAAA-MM-DD.
+ */
+export function dueOnOfInput(input: unknown): string | null {
+  if (typeof input !== 'object' || input === null || !('dueOn' in input)) return null;
+  const { dueOn } = input;
+  if (typeof dueOn !== 'string' || !ISO_DATE.test(dueOn)) return null;
+  const at = Date.parse(dueOn);
+  return !Number.isNaN(at) && new Date(at).toISOString().slice(0, 10) === dueOn ? dueOn : null;
+}
+
 export type Decision = { readonly decided: DecidedReturn; readonly note: ReturnNote };
 
 /** #156: registra um pulo só com a chave, a classificação e um código fechado. */

@@ -61,13 +61,20 @@ export const suggestionsOf = (items: readonly StoredSuggestion[]): SupplierReque
 export const okAnswer = (): StoredSuggestion => ({
   key: REQUEST_KEY,
   model: 'claude-teste',
+  input: { dueOn: DUE_ON },
   output: {
     subject: 'Devolução da nota {{nota.numero}}',
     body: 'Prezados, devolvemos {{devolucao.item[F08-001].quantidade}}, no valor de {{devolucao.valor}}. Respondam até 2026-11-19.',
   },
 });
 
-export const answerWith = (output: unknown): StoredSuggestion => ({ key: REQUEST_KEY, model: 'claude-teste', output });
+/** #156/AC-1: a sugestão guarda o `input` dado ao Claude, com o prazo da hora da pergunta. */
+export const answerWith = (output: unknown, input: unknown = { dueOn: DUE_ON }): StoredSuggestion => ({
+  key: REQUEST_KEY,
+  model: 'claude-teste',
+  input,
+  output,
+});
 
 /** #156/AC-8: um pedido já registrado para a nota, no status dado. */
 export function existingRow(status: SupplierRequestStatus): StoredRow {

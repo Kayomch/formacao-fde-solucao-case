@@ -29,8 +29,16 @@ export interface ReturnQueueValues {
   valuesOf(invoiceAccessKeys: readonly string[]): Promise<ReadonlyMap<string, Money>>;
 }
 
-/** #156: uma sugestão ok do Claude, como o laço a gravou em claude_suggestions. */
-export type StoredSuggestion = { readonly key: string; readonly output: unknown; readonly model: string };
+/**
+ * #156: uma sugestão ok do Claude, como o laço a gravou em claude_suggestions. O `input` é o que se deu ao
+ * Claude (#156/AC-6), e dele sai o prazo que ele pôde citar.
+ */
+export type StoredSuggestion = {
+  readonly key: string;
+  readonly input: unknown;
+  readonly output: unknown;
+  readonly model: string;
+};
 
 /** #156: as sugestões ok da tarefa `supplier-request`. */
 export interface SupplierRequestSuggestions {

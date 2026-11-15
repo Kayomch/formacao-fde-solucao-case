@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Money } from '../../src/domain/index.js';
+import { pendingSupplierRequests } from '../../src/returns/pending-supplier-requests.js';
 import { draftSupplierRequests } from '../../src/returns/draft-supplier-requests.js';
 import { approved, decided, giveBack, ORIGIN_KEY, sourceOf } from './return-note-fixtures.js';
 import {
@@ -144,5 +145,28 @@ describe('o Cron redige o pedido ao fornecedor a partir da sugestão do Claude (
     const { deps, lines } = setup([answerWith({ subject: 'SEGREDO {{nota.numero}}', body: 'CORPO' })], { requests });
     await draftSupplierRequests(deps);
     expect(lines.join('\n')).not.toMatch(/SEGREDO|CORPO|fornecedor\.teste/);
+  });
+
+  it('#156/AC-1, #156/AC-6: o prazo é o dado ao Claude, mesmo se o rascunho sai depois da meia-noite de Brasília', async () => {
+    const { deps, requests } = setup([]);
+    const asked = await pendingSupplierRequests({ ...deps, now: () => new Date('2026-11-17T02:59:00Z') });
+    const [first] = asked.requests;
+    if (first === undefined) throw new Error('esperava um pedido a fazer');
+    const answered = answerWith(okAnswer().output, first.input);
+    const later = { ...deps, suggestions: suggestionsOf([answered]), now: () => new Date('2026-11-17T03:01:00Z') };
+    expect(await draftSupplierRequests(later)).toEqual({ drafted: 1, discarded: 0, refused: 0, skipped: 0 });
+    expect(rows(requests)[0]?.dueOn).toBe(DUE_ON);
+  });
+
+  it.each([
+    ['sem o prazo', {}],
+    ['com o prazo fora do calendário', { dueOn: '2026-02-30' }],
+    ['com o prazo que não é texto', { dueOn: 20261119 }],
+    ['sem entrada', null],
+  ])('#156/AC-1: a sugestão %s é pulada, com o motivo invalid_input no log', async (_title, input) => {
+    const { deps, requests, lines } = setup([answerWith(okAnswer().output, input)]);
+    expect(await draftSupplierRequests(deps)).toEqual({ drafted: 0, discarded: 0, refused: 0, skipped: 1 });
+    expect(rows(requests)).toHaveLength(0);
+    expect(lines.join('\n')).toContain('motivo invalid_input');
   });
 });
