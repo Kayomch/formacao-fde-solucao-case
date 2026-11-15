@@ -256,7 +256,7 @@ já faz; apagar a entrada leva a reserva pelo cascade.
 
 ## Fica em aberto
 
-Decididos no ADR-003 (docs/adr/ADR-003-persistencia-da-emissao-da-nota-de-devolucao.md): a trava curta das `unique` e do índice de `proposals` (IDX-4), a história na própria linha (PER-3/PER-8) e a série com buracos.
+Decididos no ADR-003 (docs/adr/ADR-003-return-note-emission-persistence.md): a trava curta das `unique` e do índice de `proposals` (IDX-4), a história na própria linha (PER-3/PER-8) e a série com buracos.
 
 - **IDX-1 de Q-P3:** a leitura completa da caixa a cada rodada é do
   dono do caso de uso `publishApprovedReturnNotes`.

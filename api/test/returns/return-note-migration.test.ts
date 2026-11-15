@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const ROOT = new URL('../../../', import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, ROOT), 'utf8');
 const MIGRATION = 'supabase/migrations/20261116110000_return_note_emission.sql';
-const ADR = 'docs/adr/ADR-003-persistencia-da-emissao-da-nota-de-devolucao.md';
+const ADR = 'docs/adr/ADR-003-return-note-emission-persistence.md';
 
 describe('#156 a migração da emissão da nota de devolução', () => {
   it('#156/AC-4 revoga update, delete e truncate da reserva dos três papéis da API', () => {
@@ -24,7 +24,11 @@ describe('#156 a migração da emissão da nota de devolução', () => {
     expect(read(MIGRATION)).toContain('ADR-003');
     const registry = read('supabase/persistence-modes.yaml');
     expect(registry).toContain('ADR-003');
-    expect(registry).toContain('proposals_state_id_idx');
+    // #156 Este desenho não decide o modo de proposals: o registro não a traz, e o índice fica no desenho.
+    expect(registry).not.toMatch(/^ {2}proposals:/m);
+    expect(registry).not.toContain('proposals_state_id_idx');
+    expect(read('supabase/persistence-156-return-note-emission.md')).toContain('proposals_state_id_idx');
+    expect(read('supabase/persistence-156-return-note-emission.md')).toContain('docs/adr/ADR-003-return-note-emission-persistence.md');
     expect(registry).not.toContain('UPDATE revogado de anon');
     expect(existsSync(new URL(ADR, ROOT))).toBe(true);
     const adr = read(ADR);

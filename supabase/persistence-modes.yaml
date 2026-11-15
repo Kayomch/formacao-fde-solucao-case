@@ -65,9 +65,3 @@ tables:
     indexes:
       return_note_numbers_pkey: unicidade do número
       return_note_numbers_return_note_id_key: árbitro do on_conflict da reserva (Q-R2), a leitura da reserva por entrada (Q-R1, Q-R3) e o cascade da exclusão da entrada
-
-  proposals:
-    # Tabela do domínio (#59); entra no registro só pelo índice que a #156 acrescenta. O modo e a
-    # história dela seguem sem declaração até um desenho que a mude (PER-1).
-    indexes:
-      proposals_state_id_idx: a leitura das propostas decididas pelo Cron, state=in.(aprovada,alterada), em ordem de id (#156, ADR-003 b)

@@ -35,6 +35,28 @@ async function migrationApplied(): Promise<boolean> {
 }
 const APPLIED = await migrationApplied();
 
+/** #156 O corpo de erro do PostgREST, lido inteiro: `code` e `message` são os campos que o teste confere. */
+function isPostgrestError(value: unknown): value is { code: string; message: string } {
+  return typeof value === 'object' && value !== null && typeof Reflect.get(value, 'code') === 'string' && typeof Reflect.get(value, 'message') === 'string';
+}
+
+/** #156 PATCH direto ao PostgREST, com a URL e os cabeçalhos do SupabaseRest, para ler a resposta sem o corte do SupabaseRestError. */
+async function rawPatch(id: number, body: Record<string, unknown>): Promise<{ status: number; code: string; message: string }> {
+  const key = KEY ?? '';
+  const headers: Record<string, string> = { apikey: key, 'Content-Type': 'application/json' };
+  if (!key.startsWith('sb_')) headers.Authorization = `Bearer ${key}`;
+  const query = new URLSearchParams({ id: `eq.${id}`, status: 'eq.pendente' }).toString();
+  const response = await fetch(`${(URL_ ?? '').replace(/\/+$/, '')}/rest/v1/outbox_return_notes?${query}`, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const parsed: unknown = await response.json();
+  if (!isPostgrestError(parsed)) return { status: response.status, code: '', message: '' };
+  return { status: response.status, code: parsed.code, message: parsed.message };
+}
+
 const BY = 'fiscal@exemplo.test';
 const NOW = new Date('2026-11-16T13:00:00Z');
 const ORIGIN = `${'9'.repeat(30)}${String(Date.now()).slice(-14)}`;
@@ -134,7 +156,7 @@ describe.skipIf(!APPLIED)('#156 online: a emissão da devolução no Supabase re
     const doc = await emitter.emit(request(id, 15));
     const { chave: _dropped, ...withoutKey } = doc;
     const noteCheck = 'outbox_return_notes_note_check';
-    // #156 Cada recusa nomeia a restrição do banco no detalhe do PostgREST; o sem emitted_by é da checagem da #140.
+    // #156 Cada recusa nomeia a restrição do banco no `message` do PostgREST, lido inteiro (o detail do SupabaseRestError corta em 300); o sem emitted_by é da checagem da #140.
     const bad: [Record<string, unknown>, string][] = [
       [{ status: 'pendente', note_document: doc, note_id: doc.nota_id, note_access_key: doc.chave ?? null, note_series: doc.serie, note_number: doc.numero }, noteCheck],
       [emissionPatch(doc, { emitted_by: null }), 'outbox_return_notes_emitida_check'],
@@ -145,12 +167,10 @@ describe.skipIf(!APPLIED)('#156 online: a emissão da devolução no Supabase re
       [emissionPatch({ ...doc, nota_referenciada: '3'.repeat(44) }), noteCheck],
     ];
     for (const [body, constraint] of bad) {
-      const failure: unknown = await patch(id, body).then(
-        () => undefined,
-        (error: unknown) => error,
-      );
-      expect(failure).toBeInstanceOf(SupabaseRestError);
-      expect(failure instanceof SupabaseRestError ? failure.detail : '').toContain(constraint);
+      const refusal = await rawPatch(id, body);
+      expect(refusal.status).toBe(400);
+      expect(refusal.code).toBe('23514');
+      expect(refusal.message).toContain(constraint);
     }
     expect(await statusOf(id)).toBe('pendente');
     const manual = await entry(16);
