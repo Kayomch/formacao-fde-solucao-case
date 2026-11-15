@@ -12,6 +12,7 @@ import {
   accessKeyCheckDigit,
   issueReturnNote,
   returnAccessKey,
+  returnLineCents,
   returnNoteOfDecision,
   type Classification,
   type PartialLine,
@@ -297,5 +298,13 @@ describe('nota de devolução emitida, no formato do kit', () => {
 
   it('a mesma entrada da fila com o mesmo número e chave dá o mesmo documento', () => {
     expect(emit()).toEqual(emit());
+  });
+});
+
+describe('valor da linha devolvida', () => {
+  it('#156 é o preço unitário vezes a quantidade, arredondado ao centavo', () => {
+    expect(returnLineCents(Money.ofCents(849), Quantity.of(10, 'UN'))).toBe(8_490);
+    expect(returnLineCents(Money.ofCents(1_000), Quantity.of(0.333, 'UN'))).toBe(333);
+    expect(returnLineCents(Money.ofCents(1_001), Quantity.of(0.5, 'UN'))).toBe(501);
   });
 });

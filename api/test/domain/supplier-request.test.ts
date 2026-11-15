@@ -85,7 +85,7 @@ const noteOf = (classification: Classification, lines: readonly PartialLine[]): 
   return note;
 };
 
-// 10 UN × R$ 8,49 = R$ 84,90 e 3 UN × R$ 9,70 = R$ 29,10: total R$ 114,00.
+// #156: 10 UN × R$ 8,49 = R$ 84,90 e 3 UN × R$ 9,70 = R$ 29,10: total R$ 114,00.
 const LINES = [giveBack('SKU-1', 10), giveBack('SKU-2', 3)];
 const QUEUE_VALUE = Money.ofCents(11_400);
 const DUE_ON = '2026-11-18';
@@ -146,17 +146,22 @@ describe('o que pedir ao fornecedor, dado pela regra', () => {
 
 describe('prazo de resposta', () => {
   it('#156/AC-1 são 3 dias úteis depois do dia do rascunho', () => {
-    expect(dueOnAfter('2026-11-11')).toBe('2026-11-16'); // quarta: quinta, sexta, segunda
-    expect(dueOnAfter('2026-11-13')).toBe('2026-11-18'); // sexta
+    expect(dueOnAfter('2026-11-11')).toBe('2026-11-16'); // #156: quarta: quinta, sexta, segunda
+    expect(dueOnAfter('2026-11-13')).toBe('2026-11-18'); // #156: sexta
   });
 
   it('fim de semana conta a partir da segunda', () => {
-    expect(dueOnAfter('2026-11-14')).toBe('2026-11-18'); // sábado
-    expect(dueOnAfter('2026-11-15')).toBe('2026-11-18'); // domingo
+    expect(dueOnAfter('2026-11-14')).toBe('2026-11-18'); // #156: sábado
+    expect(dueOnAfter('2026-11-15')).toBe('2026-11-18'); // #156: domingo
   });
 
   it('recusa uma data fora de AAAA-MM-DD', () => {
     expect(() => dueOnAfter('15/11/2026')).toThrow(DomainError);
+  });
+
+  it('recusa uma data que não existe no calendário', () => {
+    expect(() => dueOnAfter('2026-02-30')).toThrow(DomainError);
+    expect(() => dueOnAfter('2026-13-01')).toThrow(DomainError);
   });
 
   it('o dia do rascunho é o de Brasília, não o do UTC', () => {
@@ -309,7 +314,7 @@ describe('pedido aberto', () => {
     ['draft', true],
     ['sent', true],
     ['discarded', false],
-    ['send_failed', false],
+    ['send_failed', true],
   ])('#156/AC-8 %s: aberto é %s', (status, open) => {
     expect(isOpenRequest(status)).toBe(open);
   });

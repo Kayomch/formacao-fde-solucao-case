@@ -10,18 +10,24 @@ import {
 import { DomainError } from './errors.js';
 import type { InvoiceView } from './invoice.js';
 import { Money } from './money.js';
-import type { ReturnNote } from './return-note.js';
+import { returnLineCents, type ReturnNote } from './return-note.js';
 
-// #156: o pedido ao fornecedor. O Claude escreve só o assunto e o corpo do e-mail; quem diz o que
-// pedimos (`asks`), a quem (`to`), até quando (`dueOn`) e todo número do texto é a regra e o banco.
+/**
+ * #156: o pedido ao fornecedor. O Claude escreve só o assunto e o corpo do e-mail; quem diz o que
+ * pedimos (`asks`), a quem (`to`), até quando (`dueOn`) e todo número do texto é a regra e o banco.
+ */
 
 export type SupplierRequestType = 'return_note'; // #156: os outros tipos da história estão fora desta entrega
 export type SupplierRequestStatus = 'draft' | 'sent' | 'discarded' | 'send_failed'; // #156
 export type SupplierRequestChannel = 'mock' | 'resend'; // #156
 
-/** #156/AC-8: aberto é o pedido que ainda vale: em rascunho ou enviado. Descartado e envio falho não bloqueiam outro. */
+/**
+ * #156/AC-8: aberto é o pedido que ainda vale: em rascunho, enviado ou com envio falho. Só o descartado é
+ * fechado. Decisão: `send_failed` é aberto porque "Tentar enviar de novo" reenvia o mesmo pedido, e um
+ * segundo rascunho ao lado deixaria dois pedidos do mesmo tipo chegarem ao fornecedor.
+ */
 export function isOpenRequest(status: SupplierRequestStatus): boolean {
-  return status === 'draft' || status === 'sent';
+  return status !== 'discarded';
 }
 
 export type AskKind =
@@ -67,12 +73,18 @@ export function brasiliaDate(instant: string): string {
   return new Date(at.getTime() - BRASILIA_OFFSET_MS).toISOString().slice(0, 10);
 }
 
+/** #156: a data existe no calendário: Date.parse rola 2026-02-30 para março, então a volta tem de dar a mesma data. */
+function isCalendarDate(date: string): boolean {
+  const at = Date.parse(date);
+  return !Number.isNaN(at) && new Date(at).toISOString().slice(0, 10) === date;
+}
+
 /**
  * #156: o prazo de resposta: 3 dias úteis (segunda a sexta) depois do dia dado, AAAA-MM-DD. Feriado fica fora.
  * Um sábado ou domingo conta a partir da segunda.
  */
 export function dueOnAfter(date: string): string {
-  if (!ISO_DATE.test(date) || Number.isNaN(Date.parse(date))) {
+  if (!ISO_DATE.test(date) || !isCalendarDate(date)) {
     throw new DomainError(`Pedido ao fornecedor: a data ${date} não é AAAA-MM-DD`);
   }
   let at = Date.parse(date);
@@ -119,7 +131,7 @@ export function buildSupplierRequestCatalog(
     if (item === undefined) {
       throw new DomainError(`Pedido ao fornecedor: a linha ${line.supplierCode} não está na nota ${invoice.number}`);
     }
-    const cents = Math.round(item.unitPrice.cents * line.quantity.amount);
+    const cents = returnLineCents(item.unitPrice, line.quantity);
     totalCents += cents;
     const code = line.supplierCode;
     put(factKey.returnItem(code, 'quantidade'), `Quantidade devolvida de ${item.description}`, `${line.quantity.amount} ${line.quantity.unit}`, 'return_note');
@@ -160,12 +172,17 @@ type RequestBase = {
   readonly draftedAt: string;
 };
 
+/**
+ * #156: o resultado do rascunho, não o registro persistido: o id e os carimbos de quando e por quem ficam na
+ * linha de `outbox_supplier_emails`, da camada OLTP.
+ */
 export type SupplierRequestDraft = RequestBase & {
   readonly status: 'draft';
   readonly subject: string;
   readonly body: string;
 };
 
+/** #156: o pedido descartado, também resultado do rascunho; id e carimbos são da linha persistida, como no rascunho. */
 export type SupplierRequestDiscarded = RequestBase & {
   readonly status: 'discarded';
   readonly reason: DiscardReason;

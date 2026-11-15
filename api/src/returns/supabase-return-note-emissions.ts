@@ -12,7 +12,7 @@ import {
   type Shape,
 } from '../connectors/guards.js';
 import { SupabaseRestError, type SupabaseRest } from '../connectors/supabase-rest.js';
-import { Money, Quantity, type ReturnNoteDocument, type ReturnNoteItemDocument } from '../domain/index.js';
+import { Money, Quantity, returnLineCents, type ReturnNoteDocument, type ReturnNoteItemDocument } from '../domain/index.js';
 import type { ReturnNoteEmissions, ReturnNoteEntry, ReturnNoteEntryStatus } from './ports.js';
 
 const TABLE = 'outbox_return_notes';
@@ -78,7 +78,7 @@ export function supabaseReturnNoteEmissions(rest: SupabaseRest): ReturnNoteEmiss
       const cents = lines.reduce((sum, line) => {
         const item = invoice.items.find((i) => i.supplierCode === line.supplierCode);
         if (item === undefined) throw new SupabaseRestError('select', TABLE, 0, 'linha fora da nota de origem');
-        return sum + Math.round(item.unitPrice.cents * line.quantity.amount);
+        return sum + returnLineCents(item.unitPrice, line.quantity);
       }, 0);
       return { id: row.id, status: row.status, lines, value: Money.ofCents(cents), invoice, document: row.note_document };
     },

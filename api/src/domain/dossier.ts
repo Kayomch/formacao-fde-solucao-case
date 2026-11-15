@@ -21,12 +21,12 @@ import type { Quantity } from './quantity.js';
 //   historico.notas_lancadas.quantidade | historico.notas_lancadas.valor
 //   historico.pagamentos.quantidade | historico.pagamentos.valor
 //   historico.notas_capturadas.quantidade
-//   devolucao.valor
-//   devolucao.item[<código>].quantidade | .preco_unitario | .valor
+//   devolucao.valor (#156)
+//   devolucao.item[<código>].quantidade | .preco_unitario | .valor (#156)
 //
 // #156: as chaves `devolucao.*` são as do pedido ao fornecedor (`supplier-request.ts`): `devolucao.valor`
 // é o total da nota de devolução, igual ao valor da devolução na fila da #140; `devolucao.item[<código>]`
-// é a linha devolvida, com a quantidade e a unidade, o preço unitário e o valor da linha.
+// é a linha devolvida, com a quantidade e a unidade, o preço unitário e o valor da linha (#156).
 //
 // No texto, um fato aparece só como o marcador {{chave}}. Fora dos marcadores, só identificadores
 // (`FactCatalog.identifiers`) podem ter algarismos.
