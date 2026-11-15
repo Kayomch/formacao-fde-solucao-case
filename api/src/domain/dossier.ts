@@ -21,11 +21,17 @@ import type { Quantity } from './quantity.js';
 //   historico.notas_lancadas.quantidade | historico.notas_lancadas.valor
 //   historico.pagamentos.quantidade | historico.pagamentos.valor
 //   historico.notas_capturadas.quantidade
+//   devolucao.valor
+//   devolucao.item[<código>].quantidade | .preco_unitario | .valor
+//
+// #156: as chaves `devolucao.*` são as do pedido ao fornecedor (`supplier-request.ts`): `devolucao.valor`
+// é o total da nota de devolução, igual ao valor da devolução na fila da #140; `devolucao.item[<código>]`
+// é a linha devolvida, com a quantidade e a unidade, o preço unitário e o valor da linha.
 //
 // No texto, um fato aparece só como o marcador {{chave}}. Fora dos marcadores, só identificadores
 // (`FactCatalog.identifiers`) podem ter algarismos.
 
-export type FactSource = 'invoice' | 'purchase_order' | 'registry' | 'receipt' | 'history'; // #68
+export type FactSource = 'invoice' | 'purchase_order' | 'registry' | 'receipt' | 'history' | 'return_note'; // #68, #156
 
 export type Fact = {
   readonly label: string;
@@ -110,6 +116,7 @@ export const DOSSIER_OUTPUT_SCHEMA = {
 
 type ItemField = 'quantidade' | 'preco_unitario' | 'total';
 type OrderItemField = 'quantidade' | 'preco_unitario' | 'saldo';
+type ReturnItemField = 'quantidade' | 'preco_unitario' | 'valor'; // #156
 
 /** #68: como cada chave do catálogo se escreve. É o contrato descrito no topo deste arquivo. */
 export const factKey = {
@@ -131,6 +138,8 @@ export const factKey = {
   paymentCount: (): string => 'historico.pagamentos.quantidade',
   paymentValue: (): string => 'historico.pagamentos.valor',
   capturedCount: (): string => 'historico.notas_capturadas.quantidade',
+  returnTotal: (): string => 'devolucao.valor', // #156
+  returnItem: (supplierCode: string, field: ReturnItemField): string => `devolucao.item[${supplierCode}].${field}`, // #156
 } as const;
 
 /** #68: as chaves do catálogo, em ordem estável. */
@@ -266,22 +275,31 @@ const SPELLED_NUMBERS: ReadonlySet<string> = new Set([
 /** #68: o token em minúsculas e sem acento, para comparar com os numerais por extenso. */
 const folded = (token: string): string => token.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 
-/** #68: o texto confere quando todo marcador está no catálogo e nenhum número sobra fora dos marcadores. */
-function textChecks(text: string, catalog: FactCatalog, allowed: ReadonlySet<string>): boolean {
+/** #156: por que um texto não confere: um marcador fora do catálogo, ou um número fora de marcador. */
+export type TextProblem = 'unknown_marker' | 'number_outside_marker';
+
+/** #156: o primeiro problema do texto, ou `null` quando ele confere. É a conferência do dossiê, com o motivo. */
+export function textProblem(text: string, catalog: FactCatalog, allowed: ReadonlySet<string>): TextProblem | null {
   for (const m of text.matchAll(MARKER)) {
-    if (!Object.hasOwn(catalog.facts, m[1] ?? '')) return false;
+    if (!Object.hasOwn(catalog.facts, m[1] ?? '')) return 'unknown_marker';
   }
   const rest = text.replace(MARKER, ' ');
   for (const token of rest.split(/[\s/]+/)) {
     const bare = token.replace(EDGE_PUNCTUATION, '');
     // #68: \p{N} pega também dígitos fora do ASCII (como `１５`), que o `\d` deixava passar.
-    if (/\p{N}/u.test(bare) && !allowed.has(bare)) return false;
-    if (SPELLED_NUMBERS.has(folded(bare))) return false;
+    if (/\p{N}/u.test(bare) && !allowed.has(bare)) return 'number_outside_marker';
+    if (SPELLED_NUMBERS.has(folded(bare))) return 'number_outside_marker';
   }
-  return true;
+  return null;
 }
 
-const renderText = (text: string, catalog: FactCatalog): string =>
+/** #68: o texto confere quando todo marcador está no catálogo e nenhum número sobra fora dos marcadores. */
+export function textChecks(text: string, catalog: FactCatalog, allowed: ReadonlySet<string>): boolean {
+  return textProblem(text, catalog, allowed) === null;
+}
+
+/** #68: troca cada marcador pelo valor do banco. */
+export const renderText = (text: string, catalog: FactCatalog): string =>
   text.replace(MARKER, (_, key: string) => catalog.facts[key]?.value ?? '');
 
 const unavailable = (reason: DossierUnavailableReason, generatedAt: string): DossierUnavailable =>
