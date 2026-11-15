@@ -109,7 +109,7 @@ const isDivergenceRow = shaped<DivergenceRow>({
   evidence: isUnknown,
 } satisfies Shape<DivergenceRow>);
 
-const isProposalRow = shaped<ProposalRow>({
+export const isProposalRow = shaped<ProposalRow>({
   id: isInteger,
   invoice_access_key: isString,
   classification: isString,
@@ -259,7 +259,7 @@ function invoiceFromRows(row: InvoiceRow, divergences: readonly DivergenceRow[])
   return invoice;
 }
 
-function proposalFromRow(row: ProposalRow, invoice: Invoice): Proposal {
+export function proposalFromRow(row: ProposalRow, invoice: Invoice): Proposal {
   if (!isClassification(row.classification)) corrupt('proposals', 'classificação desconhecida');
   const dockAction = dockActionFromJson(row.dock_action, 'proposals');
   const proposal = Proposal.register({
@@ -344,6 +344,24 @@ export async function loadCheckedInvoices(rest: SupabaseRest): Promise<Invoice[]
       row,
       divergences.filter((d) => d.invoice_access_key === row.access_key),
     ),
+  );
+}
+
+/** #156 As notas pelas chaves, com as divergências gravadas; a chave sem nota não entra no mapa. */
+export async function loadInvoicesByKeys(rest: SupabaseRest, keys: readonly string[]): Promise<Map<string, Invoice>> {
+  if (keys.length === 0) return new Map();
+  if (!keys.every(isAccessKey)) corrupt('invoices', 'chave de acesso fora do formato');
+  const keyFilter = `in.(${keys.map((k) => `"${k}"`).join(',')})`;
+  const [invoices, divergences] = await Promise.all([
+    rest.select('invoices', { filters: { access_key: keyFilter } }),
+    rest.select('divergences', { filters: { invoice_access_key: keyFilter } }),
+  ]);
+  const divergenceRows = parseRows(divergences, isDivergenceRow, 'divergences');
+  return new Map(
+    parseRows(invoices, isInvoiceRow, 'invoices').map((row) => [
+      row.access_key,
+      invoiceFromRows(row, divergenceRows.filter((d) => d.invoice_access_key === row.access_key)),
+    ]),
   );
 }
 
