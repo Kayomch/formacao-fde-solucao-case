@@ -40,7 +40,7 @@ tables:
     # cancelled_by/at) e o que (nfe_number e a nota emitida, ou a justificativa). Não é uma das
     # formas de docs/entity-history.md; o desenho diz por quê e o que muda se a máquina de estados
     # ganhar uma segunda transição.
-    history: in-row-transition
+    history: in-row-transition # decisão em ADR-003 (a)
     # O status faz o papel de versão: só `pendente` aceita escrita, e todo PATCH filtra
     # status=eq.pendente (return-notes.ts da #140 e markEmitted da #156).
     version_column: status
@@ -58,10 +58,16 @@ tables:
     mode: append-only
     history: none
     tenant: none
-    refusal: grant # UPDATE revogado de anon, authenticated e service_role na migração
+    refusal: grant # UPDATE, DELETE e TRUNCATE revogados de anon, authenticated e service_role na migração; o cascade do reset roda como o dono (ADR-003, c)
     # Não há projeção: a reserva é lida pela própria chave (return_note_id). PER-6 não se aplica
     # a uma leitura de uma linha pelo seu fato, e o desenho diz por quê.
     projection: none
     indexes:
       return_note_numbers_pkey: unicidade do número
       return_note_numbers_return_note_id_key: árbitro do on_conflict da reserva (Q-R2), a leitura da reserva por entrada (Q-R1, Q-R3) e o cascade da exclusão da entrada
+
+  proposals:
+    # Tabela do domínio (#59); entra no registro só pelo índice que a #156 acrescenta. O modo e a
+    # história dela seguem sem declaração até um desenho que a mude (PER-1).
+    indexes:
+      proposals_state_id_idx: a leitura das propostas decididas pelo Cron, state=in.(aprovada,alterada), em ordem de id (#156, ADR-003 b)

@@ -133,16 +133,25 @@ describe.skipIf(!APPLIED)('#156 online: a emissão da devolução no Supabase re
     const id = await entry(15);
     const doc = await emitter.emit(request(id, 15));
     const { chave: _dropped, ...withoutKey } = doc;
-    const bad: Record<string, unknown>[] = [
-      emissionPatch(doc, { status: 'pendente' }),
-      emissionPatch(doc, { emitted_by: null }),
-      { status: 'emitida', nfe_number: String(doc.numero), emitted_by: BY, emitted_at: NOW.toISOString(), note_id: doc.nota_id },
-      emissionPatch(doc, { nfe_number: String(doc.numero + 1) }),
-      emissionPatch(doc, { note_access_key: '2'.repeat(44) }),
-      emissionPatch(withoutKey),
-      emissionPatch({ ...doc, nota_referenciada: '3'.repeat(44) }),
+    const noteCheck = 'outbox_return_notes_note_check';
+    // #156 Cada recusa nomeia a restrição do banco no detalhe do PostgREST; o sem emitted_by é da checagem da #140.
+    const bad: [Record<string, unknown>, string][] = [
+      [{ status: 'pendente', note_document: doc, note_id: doc.nota_id, note_access_key: doc.chave ?? null, note_series: doc.serie, note_number: doc.numero }, noteCheck],
+      [emissionPatch(doc, { emitted_by: null }), 'outbox_return_notes_emitida_check'],
+      [{ status: 'emitida', nfe_number: String(doc.numero), emitted_by: BY, emitted_at: NOW.toISOString(), note_id: doc.nota_id }, noteCheck],
+      [emissionPatch(doc, { nfe_number: String(doc.numero + 1) }), noteCheck],
+      [emissionPatch(doc, { note_access_key: '2'.repeat(44) }), noteCheck],
+      [emissionPatch(withoutKey), noteCheck],
+      [emissionPatch({ ...doc, nota_referenciada: '3'.repeat(44) }), noteCheck],
     ];
-    for (const body of bad) await expect(patch(id, body)).rejects.toBeInstanceOf(SupabaseRestError);
+    for (const [body, constraint] of bad) {
+      const failure: unknown = await patch(id, body).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      expect(failure).toBeInstanceOf(SupabaseRestError);
+      expect(failure instanceof SupabaseRestError ? failure.detail : '').toContain(constraint);
+    }
     expect(await statusOf(id)).toBe('pendente');
     const manual = await entry(16);
     expect(await queue.emit(manual, '777', BY, NOW)).toMatchObject({ kind: 'ok' });
@@ -158,12 +167,13 @@ describe.skipIf(!APPLIED)('#156 online: a emissão da devolução no Supabase re
     expect(parsed).toEqual([]);
   });
 
-  it('#156/AC-4 T6: a reserva não muda, e reservar funciona com o UPDATE revogado', async () => {
+  it('#156/AC-4 T6: a reserva não muda nem se apaga, e reservar funciona com o UPDATE e o DELETE revogados', async () => {
     const id = await entry(17);
     await emitter.emit(request(id, 17));
     await expect(
       rest.update('return_note_numbers', { return_note_id: `eq.${id}` }, { reserved_at: NOW.toISOString() }),
     ).rejects.toBeInstanceOf(SupabaseRestError);
+    await expect(rest.delete('return_note_numbers', { return_note_id: `eq.${id}` })).rejects.toBeInstanceOf(SupabaseRestError);
     expect(await reservations(id)).toBe(1);
   });
 });

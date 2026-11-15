@@ -38,7 +38,7 @@ seguem o ADR-001 na parte "tudo o que o repositório inventa tem nome em inglês
 | Tabela | Modo | Por quê: fato ou entidade editada | História: forma e lugar | Versão | Inquilino |
 |---|---|---|---|---|---|
 | `outbox_return_notes` | upsert-with-history | Entrada de fila que nasce `pendente` e faz uma única transição, para `emitida` ou `cancelada`; a transição é gravada na linha (#140). | Na própria linha (`in-row-transition`): o estado antes é sempre `pendente` com as colunas da transição nulas; a transição grava quem, quando e o quê. Ver "Condições não cumpridas na forma da doc". | `status`: só `pendente` aceita escrita | nenhum |
-| `return_note_numbers` (nova) | append-only | O fato "o número N ficou com a entrada E". Uma linha por entrada, nunca muda. | nenhuma; recusa de `UPDATE` por grant | n/a | nenhum |
+| `return_note_numbers` (nova) | append-only | O fato "o número N ficou com a entrada E". Uma linha por entrada, nunca muda. | nenhuma; recusa de `UPDATE`, `DELETE` e `TRUNCATE` por grant | n/a | nenhum |
 
 ### Por que uma tabela de reserva com identidade, e não uma sequência com RPC
 
@@ -141,8 +141,14 @@ create table public.return_note_numbers (
   constraint return_note_numbers_number_check check (number between 1 and 999999999)
 );
 alter table public.return_note_numbers enable row level security;
--- #156 Append-only: a reserva não muda. O INSERT ... ON CONFLICT DO NOTHING não pede UPDATE.
-revoke update on public.return_note_numbers from anon, authenticated, service_role;
+-- #156 Append-only: a reserva não muda e não se apaga. O INSERT ... ON CONFLICT DO NOTHING não pede
+-- #156 UPDATE. O cascade da chave estrangeira roda com o dono da tabela da entrada, então o reset do
+-- #156 #56 segue funcionando sem DELETE. A série pode ter buracos, nunca repete (ADR-003, decisão c).
+revoke update, delete, truncate on public.return_note_numbers from anon, authenticated, service_role;
+
+-- #156 Serve a leitura das propostas decididas pelo Cron, `state=in.(aprovada,alterada)`, em ordem de id.
+-- #156 Índice simples, sem concurrently (ADR-003, decisão b).
+create index proposals_state_id_idx on public.proposals (state, id);
 ```
 
 Notas para quem escreve:
@@ -162,8 +168,9 @@ Notas para quem escreve:
 - **A checagem do formato do `note_id` usa regex**, não `lpad`: o domínio usa `padStart(4)`, que não
   corta número acima de 9999, e `lpad` cortaria.
 - **`on delete cascade`** na reserva: o reset do #56 apaga `outbox_return_notes` e leva as reservas
-  junto; a identidade segue contando, então um número nunca volta depois de um reset. O `DELETE` não
-  é revogado por isso (ver "Condições não cumpridas").
+  junto; a identidade segue contando, então um número nunca volta depois de um reset. O cascade
+  roda com o dono da tabela que referencia, não com o papel do chamador, então o reset do #56 segue
+  funcionando com `DELETE` e `TRUNCATE` revogados da reserva; o teste T6 prova a recusa do `DELETE`.
 - **Nenhum outro `grant`.** As tabelas novas do `public` ficam acessíveis aos papéis da API sem
   grant explícito no padrão do projeto (`supabase/config.toml`, comentário de
   `auto_expose_new_tables`); o RLS sem política fecha a chave pública, como no resto do banco.
@@ -184,7 +191,7 @@ Notas para quem escreve:
 | `return_note_numbers_pkey` | `return_note_numbers` | `number` | unicidade do número | tabela criada na mesma migração: n/a |
 | `return_note_numbers_return_note_id_key` | `return_note_numbers` | `return_note_id` | Q-R1, Q-R3; árbitro de Q-R2; o cascade da exclusão da entrada (o banco não indexa sozinho o lado que referencia, [PostgreSQL: Foreign Keys](https://www.postgresql.org/docs/current/ddl-constraints.html#DDL-CONSTRAINTS-FK)) | tabela criada na mesma migração: n/a |
 | `invoices_pkey` (existe) | `invoices` | `access_key` | Q-E2, Q-P2 | já existe |
-| nenhum | `proposals` | | Q-P1: ver IDX-1 abaixo | |
+| `proposals_state_id_idx` | `proposals` | `state, id` | Q-P1: a leitura das decididas, `state=in.(aprovada,alterada)` | não sai: ver IDX-4 abaixo (ADR-003, b) |
 
 ## Transações
 
@@ -220,9 +227,9 @@ critério (`#156/AC-4`).
 | T1 reserva idempotente por `entryId` | fake e online | Reservar duas vezes a mesma entrada devolve o mesmo número e deixa uma linha; duas reservas em paralelo (`Promise.all`) da mesma entrada devolvem o mesmo número e deixam uma linha (online: no banco real a disputa é de verdade); duas entradas ganham números diferentes; a nota gravada tem `note_number` igual à reserva da sua entrada. |
 | T2 emissão condicional | fake e online | `markEmitted` numa pendente devolve `true` e grava as nove colunas; a segunda chamada devolve `false` e o documento não muda; numa cancelada devolve `false`; a emissão à mão da #140 depois da emissão pelo mock dá `conflict`; emitir de novo pelo caso de uso não reserva outro número (contagem de linhas em `return_note_numbers` igual). |
 | T3 `note_access_key` e `note_id` únicos | online | Um PATCH numa segunda entrada pendente com a mesma chave é recusado pelo banco; o mesmo com o mesmo `nota_id`; a segunda entrada segue `pendente`. |
-| T4 restrições de `emitida` | online | Recusados: documento numa linha que fica `pendente`; documento sem `emitted_by`; só parte das `note_*`; `note_number` diferente de `nfe_number`; `note_access_key` diferente da `chave` do documento; documento sem a chave `chave`; `nota_referenciada` diferente da nota de origem. Aceito: `emitida` à mão, sem documento (#140). |
+| T4 restrições de `emitida` | online | Cada recusa traz no detalhe do PostgREST o nome da restrição violada. `outbox_return_notes_note_check` recusa: documento numa linha que fica `pendente` (com `nfe_number` e `emitted_*` nulos); só parte das `note_*`; `note_number` diferente de `nfe_number`; `note_access_key` diferente da `chave` do documento; documento sem a chave `chave`; `nota_referenciada` diferente da nota de origem. `outbox_return_notes_emitida_check` (da #140) recusa documento sem `emitted_by`. Aceito: `emitida` à mão, sem documento (#140). |
 | T5 a chave pública não lê `return_note_numbers` | online | Zero linhas ou erro, como o AC-6 do #59 já faz para as outras tabelas (acrescentar a tabela à lista do teste). |
-| T6 a reserva não muda | online | Com a chave secreta, um PATCH em `return_note_numbers` é recusado; e a reserva (Q-R2 com `ignore-duplicates`) funciona com o `UPDATE` revogado. |
+| T6 a reserva não muda | online | Com a chave secreta, um PATCH e um DELETE em `return_note_numbers` são recusados (`SupabaseRestError`); e a reserva (Q-R2 com `ignore-duplicates`) funciona com o `UPDATE` revogado. |
 
 Os testes online gravam no banco do caso e apagam o que gravaram no `afterAll`, como o AC-4 do #59
 já faz; apagar a entrada leva a reserva pelo cascade.
@@ -232,8 +239,8 @@ já faz; apagar a entrada leva a reserva pelo cascade.
 | Condição | Cumprida por | Não cumprida, e por quê |
 |---|---|---|
 | PER-1 | as duas tabelas do desenho estão no registro | O registro é novo: as outras tabelas das migrações ainda não têm modo declarado. Cada uma entra pelo próximo desenho que a tocar. |
-| PER-2 | nenhum adaptador faz `UPDATE` ou `DELETE` em `return_note_numbers`; `UPDATE` revogado | `DELETE` não é revogado: o reset do #56 apaga `outbox_return_notes`, e a reserva sai por `on delete cascade`. A página de chaves estrangeiras do PostgreSQL não diz com que privilégio o cascade roda, então revogar o `DELETE` poderia quebrar o reset. |
-| PER-3, PER-8 | `outbox_return_notes`: a única transição grava quem, quando e o quê na própria linha, num comando | Não é uma das formas da doc (tabela-filha ou coluna JSON de versões). Vale só enquanto a máquina de estados tiver uma transição a partir do único estado gravável: o estado antes é sempre o mesmo e não se perde nada. Se a entrada ganhar uma segunda transição (reabrir, corrigir a nota emitida), a história passa a ser uma tabela-filha `(return_note_id, version, at, by, state jsonb)`, e gravar as duas juntas pede RPC. |
+| PER-2 | nenhum adaptador faz `UPDATE` ou `DELETE` em `return_note_numbers`; `UPDATE`, `DELETE` e `TRUNCATE` revogados de `anon`, `authenticated` e `service_role`; o T6 prova a recusa do `DELETE` | O cascade da chave estrangeira roda com o dono da tabela da entrada, então o reset do #56 (`api/src/ops/reconferir.ts`) apaga `outbox_return_notes` e leva as reservas sem precisar do `DELETE` do chamador. |
+| PER-3, PER-8 | `outbox_return_notes`: a única transição grava quem, quando e o quê na própria linha, num comando | Não é uma das formas da doc (tabela-filha ou coluna JSON de versões); o mantenedor aceitou, e o ADR-003 (a) registra a decisão. Vale só enquanto a máquina de estados tiver uma transição a partir do único estado gravável: o estado antes é sempre o mesmo e não se perde nada. Se a entrada ganhar uma segunda transição (reabrir, corrigir a nota emitida), a história passa a ser uma tabela-filha `(return_note_id, version, at, by, state jsonb)`, e gravar as duas juntas pede RPC. |
 | PER-4 | `status` como versão: todo PATCH filtra `status=eq.pendente` (#140 e #156) | A recusa é do filtro de cada adaptador, não do banco: um PATCH sem o filtro passaria. Os dois únicos adaptadores que escrevem na tabela filtram; a revisão confere isso em cada adaptador novo. |
 | PER-5 | nenhuma exclusão nos casos de uso | O reset do #56 apaga as tabelas do domínio; é anterior e não é deste desenho. |
 | PER-6 | `return_note_numbers` não tem projeção: é lida uma linha pela sua chave | n/a |
@@ -241,22 +248,17 @@ já faz; apagar a entrada leva a reserva pelo cascade.
 | TRX-1, TRX-2 | cada escrita é uma requisição, e cada requisição uma transação; nenhum adaptador abre transação | n/a |
 | TRX-3 | reserva e emissão mudam raízes diferentes em transações diferentes; a emissão muda só a entrada | n/a |
 | TRX-4 | uma requisição termina em commit ou rollback no próprio PostgREST; a falha entre duas requisições deixa o banco certo (tabela "Transações") | n/a |
-| IDX-1 | Q-E1, Q-E2, Q-E3, Q-R1, Q-R2, Q-R3 por chave única ou primária | Q-P1 e Q-P3 leem todas as propostas decididas e a caixa inteira a cada rodada do Cron: crescem com a história, e índice nenhum as limita, porque devolvem quase a tabela toda. Hoje são 80 notas. Limitar a leitura (só as decididas ainda fora da fila) é do caso de uso, já mergeado no HEAD. Nenhum teste lê plano, porque não há Postgres local. |
+| IDX-1 | Q-E1, Q-E2, Q-E3, Q-R1, Q-R2, Q-R3 por chave única ou primária; Q-P1 pelo `proposals_state_id_idx` (`state, id`) | Q-P3 lê a caixa inteira em ordem de `id` a cada rodada do Cron: cresce com a história, e índice nenhum a limita, porque devolve quase a tabela toda. Hoje são 80 notas. Limitar a leitura é do caso de uso, já mergeado no HEAD. Nenhum teste lê plano, porque não há Postgres local. |
 | IDX-2 | cada índice novo é de restrição única ou serve Q-R1/Q-R3 | n/a |
 | IDX-3 | n/a: banco relacional | n/a |
-| IDX-4 | as duas `unique` novas são em colunas nulas em toda linha que já existe | Elas são construídas dentro do `alter table` da migração, travando escritas na fila enquanto leem a tabela. `CREATE INDEX CONCURRENTLY` não roda dentro de um bloco de transação ([PostgreSQL: CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)), e a página do `supabase db push` lida não diz se a CLI 3.1.0 do CI aplica cada arquivo numa transação. Escrito sem `CONCURRENTLY` para não quebrar o push no merge. |
+| IDX-4 | as duas `unique` novas são em colunas nulas em toda linha que já existe | Elas e o `proposals_state_id_idx` são construídos dentro da migração, com trava curta de escrita em tabelas pequenas. `CREATE INDEX CONCURRENTLY` não roda dentro de um bloco de transação ([PostgreSQL: CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY)) e a CLI do Supabase roda cada arquivo numa transação. O mantenedor aceitou a trava: ADR-003 (b). |
 | MT-1 a MT-5 | n/a: sem inquilino | n/a |
 
 ## Fica em aberto
 
-- **IDX-4: o mantenedor aceita a trava curta** da construção das duas `unique` na fila (tabela
-  pequena, colunas nulas), **ou** quem escreve a migração confirma na CLI do Supabase 3.1.0 que um
-  arquivo com `-- pg-delta: transaction=false` roda fora de transação no `db push --remote`. Nesse
-  caso, os dois índices vão para um segundo arquivo, `20261116110100_return_note_emission_unique.sql`,
-  com `create unique index concurrently`, e as `unique` saem da primeira migração.
-- **PER-3/PER-8: o mantenedor aceita a história na própria linha** para uma fila de transição
-  única, ou pede a tabela-filha de história (com RPC para gravar entidade e história juntas).
-- **IDX-1 de Q-P1 e Q-P3:** a leitura completa de propostas decididas e da caixa a cada rodada é do
+Decididos no ADR-003 (docs/adr/ADR-003-persistencia-da-emissao-da-nota-de-devolucao.md): a trava curta das `unique` e do índice de `proposals` (IDX-4), a história na própria linha (PER-3/PER-8) e a série com buracos.
+
+- **IDX-1 de Q-P3:** a leitura completa da caixa a cada rodada é do
   dono do caso de uso `publishApprovedReturnNotes`.
 - **PER-1 das outras tabelas:** `invoices`, `proposals`, `divergences`, `approvals`, `titles`,
   `outbox_dock_actions`, `outbox_store_actions`, `outbox_registry_corrections`, `automation_runs`,

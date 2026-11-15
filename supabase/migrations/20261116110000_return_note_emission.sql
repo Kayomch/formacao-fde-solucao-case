@@ -1,5 +1,7 @@
 -- #156 A nota de devolução emitida pelo mock fica na entrada da fila (#140), e o número sai de uma reserva por entrada.
 -- #156 RLS segue ligado e sem política (AC-6 do #59): só o Worker lê e grava.
+-- #156 As unique e o índice de proposals são construídos aqui, com trava curta de escrita em tabelas
+-- #156 pequenas, porque a CLI do Supabase roda cada arquivo numa transação (ADR-003, decisão b).
 
 alter table public.outbox_return_notes
   add column note_document jsonb,
@@ -48,5 +50,11 @@ create table public.return_note_numbers (
   constraint return_note_numbers_number_check check (number between 1 and 999999999)
 );
 alter table public.return_note_numbers enable row level security;
--- #156 Append-only: a reserva não muda. O INSERT ... ON CONFLICT DO NOTHING não pede UPDATE.
-revoke update on public.return_note_numbers from anon, authenticated, service_role;
+-- #156 Append-only: a reserva não muda e não se apaga. O INSERT ... ON CONFLICT DO NOTHING não pede
+-- #156 UPDATE. O cascade da chave estrangeira roda com o dono da tabela da entrada, então o reset do
+-- #156 #56 segue funcionando sem DELETE. A série pode ter buracos, nunca repete (ADR-003, decisão c).
+revoke update, delete, truncate on public.return_note_numbers from anon, authenticated, service_role;
+
+-- #156 Serve a leitura das propostas decididas pelo Cron, `state=in.(aprovada,alterada)`, em ordem de id.
+-- #156 Índice simples, sem concurrently (ADR-003, decisão b).
+create index proposals_state_id_idx on public.proposals (state, id);
