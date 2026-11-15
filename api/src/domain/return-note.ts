@@ -157,6 +157,11 @@ export type IssueReturnNoteInput = {
   readonly issuedOn: string;
 };
 
+/** #156: o valor da linha devolvida em centavos: preço unitário vezes quantidade, arredondado; a quantidade em CX passada a UN pode ser fracionária. */
+export function returnLineCents(unitPrice: Money, quantity: Quantity): number {
+  return Math.round(unitPrice.cents * quantity.amount);
+}
+
 /** #156: valor em unidade monetária com duas casas a partir de centavos inteiros, sem acumular ponto flutuante. */
 const centsToMajor = (cents: number): number => cents / 100;
 
@@ -175,8 +180,7 @@ export function issueReturnNote(input: IssueReturnNoteInput): ReturnNoteDocument
     if (item.quantity.unit !== line.quantity.unit) {
       throw new DomainError(`Nota de devolução: a linha ${line.supplierCode} está em outra unidade que a da nota`);
     }
-    // #156: o arredondamento é o da fila da #140 (return-notes.ts); a quantidade em CX passada a UN pode ser fracionária.
-    const cents = Math.round(item.unitPrice.cents * line.quantity.amount);
+    const cents = returnLineCents(item.unitPrice, line.quantity); // #156: o arredondamento é o da fila da #140
     const document: ReturnNoteItemDocument = {
       codigo_fornecedor: item.supplierCode, // ADR-001
       sku: item.sku,

@@ -17,3 +17,4 @@ export * from './description-match.js';
 export * from './probable-order.js';
 export * from './dossier.js';
 export * from './return-note.js';
+export * from './supplier-request.js';
