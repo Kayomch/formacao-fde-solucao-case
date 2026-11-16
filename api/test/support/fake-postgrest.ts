@@ -75,6 +75,14 @@ export class FakePostgrest {
           }
           return json(409, { message: 'duplicate key' });
         }
+        if (table === 'outbox_supplier_emails' && this.holdsOpenRequest(rows, incoming)) {
+          return json(409, {
+            code: '23505',
+            details: null,
+            hint: null,
+            message: 'duplicate key value violates unique constraint "outbox_supplier_emails_open_request_key"',
+          });
+        }
         const row: Row = { ...this.defaults(table), ...incoming };
         rows.push(row);
         out.push(row);
@@ -93,8 +101,23 @@ export class FakePostgrest {
     return json(405, {});
   };
 
+  /** #156/AC-8: o índice parcial único (invoice_access_key, request_type) onde status <> 'discarded'. O fake não imita o gatilho. */
+  private holdsOpenRequest(rows: Row[], incoming: Row): boolean {
+    if (incoming.status === 'discarded') return false;
+    return rows.some(
+      (r) =>
+        r.status !== 'discarded' &&
+        r.invoice_access_key === incoming.invoice_access_key &&
+        r.request_type === incoming.request_type,
+    );
+  }
+
   private defaults(table: string): Row {
     const now = new Date().toISOString();
+    // #156 O pedido ao fornecedor: as colunas com padrão na migração.
+    if (table === 'outbox_supplier_emails') {
+      return { id: this.nextId++, attachments: [], version: 1, changed_at: now, reason: null, sent_by: null, sent_at: null, provider_message_id: null };
+    }
     // #140 A fila de devolução: o estado inicial e as colunas que a migração deixa nulas.
     if (table === 'outbox_return_notes') {
       return {
@@ -143,6 +166,11 @@ export class FakePostgrest {
       }
       if (expr.startsWith('gte.')) {
         if (Date.parse(String(row[col])) < Date.parse(expr.slice(4))) return false;
+        continue;
+      }
+      // #156 neq.: o filtro que exclui um valor (status=neq.cancelada).
+      if (expr.startsWith('neq.')) {
+        if (String(row[col]) === expr.slice(4)) return false;
         continue;
       }
       if (!expr.startsWith('eq.')) throw new Error(`fake: filtro não suportado ${col}=${expr}`);

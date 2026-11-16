@@ -83,4 +83,14 @@ describe('#59 validação na borda', () => {
     const rest = new SupabaseRest({ url: 'https://x', secretKey: SECRET, fetch: async () => new Response('{"a":1}') });
     await expect(rest.select('t')).rejects.toMatchObject({ operation: 'parse' });
   });
+
+  it('#156 o erro de uma resposta que não é ok guarda o code e a message lidos do corpo, e null quando o corpo não é JSON', async () => {
+    const answer = (text: string) => new SupabaseRest({ url: 'https://x', secretKey: SECRET, fetch: async () => new Response(text, { status: 409 }) });
+    const body = JSON.stringify({ code: '23505', message: 'duplicate key "idx"', details: 'x'.repeat(600) });
+    const error = await answer(body).insert('t', [{ a: 1 }]).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SupabaseRestError);
+    expect(error).toMatchObject({ status: 409, code: '23505', serverMessage: 'duplicate key "idx"' });
+    const plain = await answer('<html>').insert('t', [{ a: 1 }]).catch((e: unknown) => e);
+    expect(plain).toMatchObject({ status: 409, code: null, serverMessage: null });
+  });
 });

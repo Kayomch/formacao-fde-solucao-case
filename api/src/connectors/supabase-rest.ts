@@ -41,6 +41,10 @@ export class SupabaseRestError extends Error {
     readonly table: string,
     readonly status: number,
     readonly detail: string,
+    /** #156 O `code` do corpo de erro do PostgREST, lido do corpo inteiro; null se o corpo não é JSON com `code`. */
+    readonly code: string | null = null,
+    /** #156 A `message` desse corpo, lida do corpo inteiro; serve a quem decide o erro, nunca a log nem a resposta. */
+    readonly serverMessage: string | null = null,
   ) {
     super(`supabase-rest: ${operation} em ${table} falhou (HTTP ${status}) ${detail}`.trim());
     this.name = 'SupabaseRestError';
@@ -50,6 +54,20 @@ export class SupabaseRestError extends Error {
 const DEFAULT_PAGE_SIZE = 1000;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const MAX_DETAIL = 300;
+
+/** #156 Lê `code` e `message` do corpo de erro inteiro, antes do corte do detalhe; qualquer outra forma dá null. */
+function postgrestErrorFields(text: string): { code: string | null; message: string | null } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return { code: null, message: null };
+  }
+  if (typeof parsed !== 'object' || parsed === null) return { code: null, message: null };
+  const code: unknown = Reflect.get(parsed, 'code');
+  const message: unknown = Reflect.get(parsed, 'message');
+  return { code: typeof code === 'string' ? code : null, message: typeof message === 'string' ? message : null };
+}
 
 export class SupabaseRest {
   private readonly base: string;
@@ -158,7 +176,8 @@ export class SupabaseRest {
       throw new SupabaseRestError('network', table, 0, detail);
     }
     if (!response.ok) {
-      throw new SupabaseRestError(operation, table, response.status, text.slice(0, MAX_DETAIL));
+      const body = postgrestErrorFields(text);
+      throw new SupabaseRestError(operation, table, response.status, text.slice(0, MAX_DETAIL), body.code, body.message);
     }
     if (!text) return [];
     let parsed: unknown;
