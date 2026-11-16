@@ -34,7 +34,7 @@ export type InsertOptions = {
 
 export type RestOperation = 'select' | 'insert' | 'upsert' | 'update' | 'delete' | 'network' | 'parse';
 
-/** #59 Falha do PostgREST. A mensagem diz a operação, a tabela e o status; nunca a chave nem os dados. */
+/** #59 Falha do PostgREST. A mensagem diz a operação, a tabela, o status e o code; nunca a chave nem o corpo (#156, DAT-1): o `detail` é campo, e nenhuma saída o imprime. */
 export class SupabaseRestError extends Error {
   constructor(
     readonly operation: RestOperation,
@@ -46,7 +46,7 @@ export class SupabaseRestError extends Error {
     /** #156 A `message` desse corpo, lida do corpo inteiro; serve a quem decide o erro, nunca a log nem a resposta. */
     readonly serverMessage: string | null = null,
   ) {
-    super(`supabase-rest: ${operation} em ${table} falhou (HTTP ${status}) ${detail}`.trim());
+    super(`supabase-rest: ${operation} em ${table} falhou (HTTP ${status}${code ? ` ${code}` : ''})`);
     this.name = 'SupabaseRestError';
   }
 }

@@ -51,6 +51,22 @@ describe('#59/AC-1 cliente PostgREST', () => {
     expect(String((error as Error).message)).not.toContain(SECRET);
   });
 
+  it('#156 DAT-1 a mensagem do erro de um 23514 traz operação, tabela, status e code, e nunca o e-mail nem o texto da linha', async () => {
+    const body = JSON.stringify({
+      code: '23514',
+      message: 'new row for relation "outbox_supplier_emails" violates check constraint',
+      details: 'Failing row contains (1, fiscal.f01@fornecedores.test, Assunto reservado, Corpo do rascunho).',
+    });
+    const rest = new SupabaseRest({ url: 'https://x', secretKey: SECRET, fetch: async () => new Response(body, { status: 400 }) });
+    const error = await rest.insert('outbox_supplier_emails', [{ a: 1 }]).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(SupabaseRestError);
+    const message = (error as Error).message;
+    expect(message).toBe('supabase-rest: insert em outbox_supplier_emails falhou (HTTP 400 23514)');
+    expect(message).not.toContain('fiscal.f01@fornecedores.test');
+    expect(message).not.toContain('Corpo do rascunho');
+    expect((error as SupabaseRestError).detail).toContain('Failing row contains');
+  });
+
   it('update e delete sem filtro são recusados', async () => {
     const rest = new SupabaseRest({ url: 'https://x', secretKey: SECRET, fetch: new FakePostgrest().fetch });
     await expect(rest.delete('t', {})).rejects.toBeInstanceOf(SupabaseRestError);
@@ -68,7 +84,7 @@ describe('#59 REL-1 tempo máximo da requisição', () => {
     const error = await rest.select('t').catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SupabaseRestError);
     expect(error).toMatchObject({ operation: 'network', table: 't', status: 0 });
-    expect(String(error)).toContain('sem resposta em 20 ms');
+    expect(error).toMatchObject({ detail: 'sem resposta em 20 ms' }); // #156 o detalhe é campo; a mensagem não o carrega
     expect(String(error)).not.toContain(SECRET);
   });
 

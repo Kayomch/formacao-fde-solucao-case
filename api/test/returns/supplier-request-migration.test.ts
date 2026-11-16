@@ -1,6 +1,7 @@
 // #156 A migração do pedido ao fornecedor, o domínio, o registro e o ADR-005 dizem o mesmo; sem Postgres local, o texto da migração se confere offline (T8, T9).
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { arrayOf, isString, parseOne, shaped } from '../../src/connectors/guards.js';
 import { isOpenRequest, type SupplierRequestStatus } from '../../src/domain/index.js';
 
 const ROOT = new URL('../../../', import.meta.url);
@@ -18,7 +19,8 @@ describe('#156 a migração do pedido ao fornecedor', () => {
     expect(complete).toBe(true);
     const sql = read(MIGRATION);
     const seeded = [...sql.matchAll(/^\s*\('(F\d{2})', '([^']+)'\)[,;]$/gm)];
-    const kit = (JSON.parse(read('data/kit/fornecedores.json')) as { fornecedor_id: string }[]).map((f) => f.fornecedor_id); // ADR-001
+    const kitRows = parseOne(JSON.parse(read('data/kit/fornecedores.json')) as unknown, arrayOf(shaped<{ fornecedor_id: string }>({ fornecedor_id: isString })), 'fornecedores'); // ADR-001
+    const kit = kitRows.map((f) => f.fornecedor_id);
     expect(seeded.map((m) => m[1])).toEqual(kit);
     for (const [, id, email] of seeded) expect(email).toBe(`fiscal.${(id ?? '').toLowerCase()}@fornecedores.test`);
   });

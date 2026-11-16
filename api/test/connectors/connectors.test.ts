@@ -128,7 +128,7 @@ describe('#59 validação na borda: linha malformada vira erro com a tabela e o 
     const error = await captureDeps.sefaz.listIssuedInvoices().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(SupabaseRestError);
     expect(error).toMatchObject({ operation: 'parse', table: 'kit_notas' });
-    expect(String(error)).toMatch(/linha \d+ fora do formato esperado/);
+    expect((error as SupabaseRestError).detail).toMatch(/linha \d+ fora do formato esperado/); // #156 o detalhe é campo; a mensagem não o carrega
     expect(String(error)).not.toContain('segredo-nao-numerico');
   });
 
